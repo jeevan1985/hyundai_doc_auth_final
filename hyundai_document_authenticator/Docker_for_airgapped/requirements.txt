@@ -1,0 +1,41 @@
+# --- Web Frameworks & Server ---
+Flask>=2.2.0,<3.1.0
+Flask-SQLAlchemy>=2.5.0,<3.2.0
+Flask-Migrate>=4.0.0,<5.0.0
+Flask-Login>=0.6.0,<0.7.0
+Flask-WTF>=1.1.0,<2.0.0
+WTForms>=3.0.0,<4.0.0
+email-validator>=2.0.0,<3.0.0
+Werkzeug>=2.2.0,<3.1.0
+gunicorn>=21.0.0,<22.0.0
+fastapi>=0.95.0,<0.112.0
+uvicorn[standard]>=0.22.0,<0.23.0
+pydantic>=1.10.0,<2.0.0
+requests>=2.30.0,<2.32.0
+# NEW: Potential library for a FastAPI-based GUI. Uncomment when needed.
+# fastui>=0.5.0,<0.6.0
+
+# --- Core ML & Data Libraries ---
+# CRITICAL: Pin NumPy to <2.0 to maintain compatibility with faiss-cpu, torch, etc.
+numpy>=1.20.0,<2.0.0
+torch>=2.0.0,<2.4.0
+torchvision>=0.15.0,<0.19.0
+transformers>=4.20.0,<5.0.0
+opencv-python-headless>=4.5.0,<5.0.0
+Pillow>=9.0.0,<11.0.0
+
+# --- Vector Databases ---
+faiss-cpu>=1.7.0,<1.8.0
+qdrant-client>=1.7.0,<2.0.0
+
+# --- Sql Database ---
+psycopg2-binary
+
+# --- Utilities ---
+PyYAML>=6.0,<7.0
+tqdm>=4.60.0,<5.0.0
+python-dotenv>=1.0.0,<1.1.0
+
+# --- Cloud Backup Tool ---
+boto3>=1.28.0,<1.35.0
+tenacity>=8.2.0,<8.3.0

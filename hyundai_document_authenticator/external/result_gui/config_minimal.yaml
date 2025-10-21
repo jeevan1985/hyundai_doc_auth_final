@@ -1,0 +1,42 @@
+# Result GUI — Minimal Config
+#
+# Purpose: Minimal settings to run the GUI against CSV or PostgreSQL.
+# Path resolution: Relative paths are resolved relative to THIS file.
+# Quick start:
+#   1) For offline demo, set use_csv: true and adjust csv_path.
+#   2) For DB-backed mode, set use_csv: false and ensure .env has POSTGRES_*.
+#   3) Optionally change web_port.
+#
+# Environment & security:
+#   - DB credentials come from .env/OS env by default; see mapping in code.
+#   - Never embed real secrets in YAML; use .env next to this file.
+
+# Prefer .env/OS env for DB values; falls back to YAML when missing.
+# Default if omitted (code): true.
+# Allowed: true | false
+user_environment_db_config: true
+
+# Results source selection. Default in code if omitted: use_csv=false.
+# - true  => read from CSV at csv_path (no DB required)
+# - false => read from PostgreSQL table specified via env/YAML
+use_csv: true
+
+# CSV path used only when use_csv=true.
+# Default if omitted and use_csv=true: REQUIRED.
+csv_path: ./debug_results.csv
+
+# DB table names (used when use_csv=false). Values may be overridden by env.
+# Defaults if omitted: auth_db_schema="public", app_user_table="users".
+auth_db_schema: "public"
+app_user_table: "users"
+
+# Web server settings
+# Purpose: Port and debug flag for Flask dev server.
+# Defaults if omitted: web_port=8080, debug_mode=false.
+web_port: 5000
+debug_mode: false
+
+# Two-factor authentication toggle
+# Default if omitted: false.
+# Allowed: true | false
+enable_2F_authentication: false

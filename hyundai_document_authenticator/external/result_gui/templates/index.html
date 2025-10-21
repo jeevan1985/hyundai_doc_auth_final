@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="section-box">
+  <h4 class="mb-2">{{ TRANSLATIONS['index.title'] }}</h4>
+  <form class="row gy-2 gx-3 align-items-end" method="get">
+    <input type="hidden" name="page" value="1">
+
+    <div class="col-12 col-md-3">
+      <label class="form-label">{{ TRANSLATIONS['index.global_search'] }}</label>
+      <input class="form-control" type="search" placeholder="{{ TRANSLATIONS['index.search_placeholder'] }}" name="q" value="{{ search or '' }}">
+    </div>
+
+    <div class="col-12 col-md-3">
+      <label class="form-label">{{ TRANSLATIONS['index.column'] }}</label>
+      <select class="form-select" name="filter_col">
+        <option value="">{{ TRANSLATIONS['common.none'] }}</option>
+        {% for c in available_columns %}
+          <option value="{{ c }}" {% if filter_col and filter_col|lower == c|lower %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-6 col-md-2">
+      <label class="form-label">{{ TRANSLATIONS['index.mode'] }}</label>
+      <select class="form-select" name="filter_mode">
+        <option value="equals" {% if filter_mode == 'equals' %}selected{% endif %}>{{ TRANSLATIONS['index.mode.equals'] }}</option>
+        <option value="contains" {% if filter_mode == 'contains' %}selected{% endif %}>{{ TRANSLATIONS['index.mode.contains'] }}</option>
+      </select>
+    </div>
+
+    <div class="col-6 col-md-2">
+      <label class="form-label">{{ TRANSLATIONS['index.value'] }}</label>
+      <input class="form-control" type="text" name="filter_val" value="{{ filter_val or '' }}">
+    </div>
+
+    <div class="col-12"><hr class="my-2"></div>
+
+    <div class="col-12">
+      <h6>{{ TRANSLATIONS['index.filter_results'] }}</h6>
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label">{{ TRANSLATIONS['index.field'] }}</label>
+      <select class="form-select" name="filter_field" multiple size="2" aria-label="{{ TRANSLATIONS['index.field'] }}">
+        <option value="top_similar_docs" {% if filter_fields and 'top_similar_docs' in filter_fields %}selected{% endif %}>{{ TRANSLATIONS['index.field.top_similar_docs'] }}</option>
+        <option value="image_authenticity" {% if filter_fields and 'image_authenticity' in filter_fields %}selected{% endif %}>{{ TRANSLATIONS['index.field.image_authenticity'] }}</option>
+      </select>
+      <div class="form-text">{{ TRANSLATIONS['controls.hint_multi'] if TRANSLATIONS.get('controls.hint_multi') else 'Hold Ctrl/Cmd to select multiple' }}</div>
+    </div>
+
+    <!-- top_similar_docs sub-controls -->
+    <div class="col-12 col-md-3">
+      <label class="form-label">{{ TRANSLATIONS['index.doc_key'] }}</label>
+      <input class="form-control" type="text" name="td_key" placeholder="{{ TRANSLATIONS['index.doc_key_placeholder'] }}" value="{{ td_key or '' }}" data-bs-toggle="tooltip" title="{{ TRANSLATIONS['index.doc_key'] }}">
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label">{{ TRANSLATIONS['index.key_mode'] }}</label>
+      <select class="form-select" name="td_key_mode">
+        <option value="equals" {% if td_key_mode == 'equals' %}selected{% endif %}>{{ TRANSLATIONS['index.mode.equals'] }}</option>
+        <option value="contains" {% if td_key_mode == 'contains' %}selected{% endif %}>{{ TRANSLATIONS['index.mode.contains'] }}</option>
+      </select>
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label">{{ TRANSLATIONS['index.score_op'] }}</label>
+      <select class="form-select" name="td_score_op">
+        {% for op in ['>=','>','<=','<','='] %}
+          <option value="{{ op }}" {% if td_score_op == op %}selected{% endif %}>{{ op }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label">{{ TRANSLATIONS['index.score'] }}</label>
+      <input class="form-control" type="text" name="td_score_val" value="{{ td_score_val or '' }}" placeholder="{{ TRANSLATIONS['index.score_placeholder'] }}" data-bs-toggle="tooltip" title="{{ TRANSLATIONS['index.score'] }}">
+    </div>
+
+    <!-- image_authenticity sub-controls -->
+    <div class="col-6 col-md-2">
+      <label class="form-label">{{ TRANSLATIONS['index.class_mode'] }}</label>
+      <select class="form-select" name="ia_mode">
+        <option value="equals" {% if ia_mode == 'equals' %}selected{% endif %}>{{ TRANSLATIONS['index.mode.equals'] }}</option>
+        <option value="contains" {% if ia_mode == 'contains' %}selected{% endif %}>{{ TRANSLATIONS['index.mode.contains'] }}</option>
+      </select>
+    </div>
+    <div class="col-12 col-md-3">
+      <label class="form-label">{{ TRANSLATIONS['index.class'] }}</label>
+      <input class="form-control" type="text" list="ia_classes_datalist" name="ia_val" value="{{ ia_val or '' }}" placeholder="{{ TRANSLATIONS['index.class_placeholder'] }}" data-bs-toggle="tooltip" title="{{ TRANSLATIONS['index.class'] }}">
+      <datalist id="ia_classes_datalist">
+        {% for cls in ia_classes or [] %}
+          <option value="{{ cls }}"></option>
+        {% endfor %}
+      </datalist>
+    </div>
+    <div class="col-12 col-md-3 d-flex align-items-center" style="padding-top: 1.9rem;">
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" id="simplifyToggle" data-testid="simplify-toggle" data-bs-toggle="tooltip" title="{{ TRANSLATIONS['controls.simplify'] }}">
+        <label class="form-check-label" for="simplifyToggle"><i class="bi bi-funnel me-1"></i>{{ TRANSLATIONS['controls.simplify'] }}</label>
+      </div>
+    </div>
+
+    <div class="col-12"><hr class="my-2"></div>
+
+    <div class="col-12 col-md-3">
+      <label class="form-label">{{ TRANSLATIONS['index.sort_by'] }}</label>
+      <select class="form-select" name="sort_by">
+        <option value="">{{ TRANSLATIONS['common.default'] }}</option>
+        {% for c in available_columns %}
+          <option value="{{ c }}" {% if sort_by and sort_by|lower == c|lower %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="col-6 col-md-2">
+      <label class="form-label">{{ TRANSLATIONS['index.direction'] }}</label>
+      <select class="form-select" name="sort_dir">
+        <option value="asc" {% if sort_dir == 'asc' %}selected{% endif %}>{{ TRANSLATIONS['index.asc'] }}</option>
+        <option value="desc" {% if sort_dir == 'desc' %}selected{% endif %}>{{ TRANSLATIONS['index.desc'] }}</option>
+      </select>
+    </div>
+
+    <div class="col-12 col-md-2">
+      <button class="btn btn-primary w-100" type="submit">{{ TRANSLATIONS['index.apply'] }}</button>
+    </div>
+  </form>
+</div>
+
+<div class="section-box">
+  <div class="table-responsive">
+  <table class="table table-striped table-hover table-bordered table-sm align-middle" id="resultsTable" data-export-filename="results_view">
+    <thead class="table-dark">
+      <tr>
+        {% for col in columns %}
+          <th scope="col">{{ 'id' if (col|lower == 'entry number') else col }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% if rows %}
+        {% for row in rows %}
+          <tr>
+            {% for cell in row %}
+              <td>{{ cell }}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="{{ columns|length }}" class="text-center">{{ TRANSLATIONS['index.no_results'] }}</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<nav aria-label="Page navigation" class="section-box">
+  <ul class="pagination justify-content-center">
+    <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+      <a class="page-link" href="?page={{ pagination.prev_page }}&per_page={{ pagination.per_page }}&q={{ search or '' }}&filter_col={{ filter_col or '' }}&filter_mode={{ filter_mode or '' }}&filter_val={{ filter_val or '' }}{% if filter_fields %}{% for f in filter_fields %}&filter_field={{ f }}{% endfor %}{% endif %}&td_key={{ td_key or '' }}&td_key_mode={{ td_key_mode or '' }}&td_score_op={{ td_score_op or '' }}&td_score_val={{ td_score_val or '' }}&ia_mode={{ ia_mode or '' }}&ia_val={{ ia_val or '' }}&sort_by={{ sort_by or '' }}&sort_dir={{ sort_dir or '' }}">{{ TRANSLATIONS['index.previous'] }}</a>
+    </li>
+    <li class="page-item disabled"><a class="page-link" href="#">{{ TRANSLATIONS['common.page'] }} {{ pagination.page }} {{ TRANSLATIONS['common.of'] }} {{ pagination.total_pages }}</a></li>
+    <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+      <a class="page-link" href="?page={{ pagination.next_page }}&per_page={{ pagination.per_page }}&q={{ search or '' }}&filter_col={{ filter_col or '' }}&filter_mode={{ filter_mode or '' }}&filter_val={{ filter_val or '' }}{% if filter_fields %}{% for f in filter_fields %}&filter_field={{ f }}{% endfor %}{% endif %}&td_key={{ td_key or '' }}&td_key_mode={{ td_key_mode or '' }}&td_score_op={{ td_score_op or '' }}&td_score_val={{ td_score_val or '' }}&ia_mode={{ ia_mode or '' }}&ia_val={{ ia_val or '' }}&sort_by={{ sort_by or '' }}&sort_dir={{ sort_dir or '' }}">{{ TRANSLATIONS['index.next'] }}</a>
+    </li>
+  </ul>
+</nav>
+{% endblock %}

@@ -1,0 +1,177 @@
+# ==============================================================================
+#            DEVELOPMENT OVERRIDE for Mamba/Debian-based Environments
+# ==============================================================================
+#
+# --- PURPOSE ---
+# This file contains overrides specifically for a local development workflow using
+# the Mamba-built image. It is designed to be MERGED with the base
+# `docker-compose.mamba.yaml` file to create a complete dev setup.
+#
+# Key Features:
+#   - Builds the image using `Dockerfile.mamba.dev`.
+#   - Enables live code reloading by mounting the local source code.
+#   - Overrides service commands to run them in debug/reload mode.
+#   - Creates a SEPARATE, isolated PostgreSQL database for development.
+#
+# --- HOW TO RUN ---
+# This file MUST be used alongside the base Mamba compose file.
+#
+# docker-compose -f docker-compose.mamba.yaml -f docker-compose.mamba.dev.yaml --profile postgres up --build -d
+#
+# This command does the following:
+#   1. Reads `docker-compose.mamba.yaml` as the base configuration.
+#   2. MERGES the overrides from this file (`docker-compose.mamba.dev.yaml`) on top.
+#   3. Activates the `postgres` profile to start the database service.
+#   4. Builds the development image using `Dockerfile.mamba.dev`.
+#   5. Starts all services in the background.
+# ==============================================================================
+
+# ==============================================================================
+#                 --- DEVELOPMENT OVERRIDE TEMPLATE (YAML ANCHOR) ---
+# ==============================================================================
+# This YAML anchor defines the set of overrides that are common to all our
+# application services when running in development mode.
+x-dev-app-overrides: &dev-overrides
+  # OVERRIDE 1: Specify the Development Build Context.
+  # This section completely replaces the `image:` tag from the base file. It
+  # tells Compose to build an image locally instead.
+  build:
+    context: .
+    # ⭐ THE ONLY CRITICAL CHANGE IS HERE ⭐
+    # We point to the Mamba-based development Dockerfile. This is the only
+    # modification needed to switch from a Conda-based dev workflow to a
+    # Mamba-based one.
+    dockerfile: Dockerfile.mamba.dev
+    # We pass the host user's UID/GID as build arguments. This is critical for
+    # ensuring the user inside the container can read/write to the source code
+    # you mount from the host, preventing permission errors.
+    args:
+      HOST_UID: ${UID:-1000}
+      HOST_GID: ${GID:-1000}
+
+  # OVERRIDE 2: Enable Live Code Reloading via Bind Mounts.
+  # This `volumes` section completely REPLACES the named volume definitions
+  # from the `x-app-base` anchor in the main compose file.
+  volumes:
+      # Mount the entire current directory (.) from the host into the container's
+      # working directory. Any code change on the host is instantly available
+      # inside the container. The ':z' is for SELinux systems, ensuring the
+      # container has the correct security context to access the mounted volume.
+      - .:/home/appuser/app:z
+      # We also explicitly use bind mounts for data directories in dev. This allows
+      # you to easily inspect logs and instance data directly on your host machine.
+      - ./instance:/home/appuser/app/instance:z
+      - ./logs:/home/appuser/app/logs:z
+      - ./downloads:/home/appuser/app/downloads:z
+
+  # OVERRIDE 3: Define Development Service Dependencies.
+  # This ensures our app services wait for the development database and qdrant
+  # services to be healthy before starting. This is identical to the conda setup.
+  depends_on:
+    db:
+      condition: service_healthy
+    qdrant:
+      condition: service_healthy
+
+# ==============================================================================
+#                      --- DEVELOPMENT SERVICE DEFINITIONS ---
+# ==============================================================================
+services:
+  app_scheduler:
+    <<: *dev-overrides
+    container_name: app_scheduler_mamba_dev_service
+    command: scheduler
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  # --- 1. PostgreSQL Development Database (OVERRIDE) ---
+  # This 'db' service definition completely REPLACES the 'db' service from the
+  # base `docker-compose.mamba.yaml` file.
+  db:
+    profiles: ["postgres"]
+    image: postgres:15-alpine
+    container_name: postgres_db_dev_service # A distinct name to avoid confusion.
+    restart: unless-stopped
+    volumes:
+      # --- CRITICAL ISOLATION ---
+      # We use a DIFFERENT named volume (`postgres_data_dev`) for the development
+      # database. This keeps your development data completely separate from any
+      # potential production data, which is a crucial safety measure.
+      - postgres_data_dev:/var/lib/postgresql/data
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      # Expose the database port to a different port on the host (5433).
+      # This allows you to connect to the dev DB with a local GUI tool (like
+      # DBeaver or pgAdmin) without it conflicting with a local Postgres
+      # instance that might be running on the default port 5432.
+      - "5433:5432"
+
+  # --- 2. Qdrant Service ---
+  # No override is needed for Qdrant. Docker Compose will automatically inherit
+  # the full definition from the base `docker-compose.mamba.yaml` file.
+
+  # --- 3. Flask API Service (OVERRIDE for Development) ---
+  flask_api:
+    <<: *dev-overrides # Apply the common build, volume, and dependency overrides.
+    container_name: flask_api_dev_service
+    # OVERRIDE the command to start the Flask development server with debugging
+    # and auto-reloading enabled.
+    command: flask run --host=0.0.0.0 --port=5001 --debug
+
+  # --- 4. FastAPI Service (OVERRIDE for Development) ---
+  fastapi_api:
+    <<: *dev-overrides # Apply the common overrides.
+    container_name: fastapi_api_dev_service
+    # OVERRIDE the command to start the Uvicorn server with --reload, which
+    # automatically restarts the server when code changes are detected.
+    command: uvicorn fastapi_app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --- 5. GUI Service (OVERRIDE for Development) ---
+  gui:
+    <<: *dev-overrides
+    container_name: gui_dev_service
+    command: flask --app gui_app.app.py run --host=0.0.0.0 --port=8501 --debug
+    # The depends_on logic is more specific here and overrides the one from the anchor.
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      flask_api:
+        condition: service_started
+
+  # --- 6. FastAPI GUI Service (OVERRIDE for Development) ---
+  fastapi_gui:
+    <<: *dev-overrides
+    container_name: fastapi_gui_dev_service
+    command: uvicorn fastapi_gui.main:app --host 0.0.0.0 --port 8502 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      fastapi_api:
+        condition: service_started
+
+  # --- 7. CLI Runner (OVERRIDE for Development) ---
+  cli_runner:
+    <<: *dev-overrides # Inherits the dev build context and volume mounts.
+    container_name: cli_runner_dev_service
+    # No command is needed; it will be provided via `docker-compose run`.
+
+# ==============================================================================
+#                      --- DEVELOPMENT NAMED VOLUMES ---
+# ==============================================================================
+# This section formally declares any NEW named volumes introduced by this file.
+volumes:
+  # The only new volume is the one for our isolated development database.
+  postgres_data_dev:
+    # All other volumes defined in the base `docker-compose.mamba.yaml`
+    # (like `qdrant_data`) are automatically included when the files are merged.

@@ -1,0 +1,26 @@
+## mock server
+###############
+
+## YEOKSAAM
+#---------------------
+
+>python mock_api_server.py --key-table "D:\mock_api_TEST\filtered_rows.xlsx" --search-root "D:\mock_api_TEST\mock_api_server_images" --insert-token 001 --tail-len 5 --glob-suffix "_*.tif" --any-depth --debug --save-folder-location D:\frm_git\hyundai_document_authenticator\hyundai_document_authenticator\instance\database_images 
+
+# no token server
+python mock_api_server.py --key-table "D:\mock_api_TEST\filtered_rows.xlsx" --search-root "D:\mock_api_TEST\mock_api_server_images" --tail-len 5 --glob-suffix "_*.tif" --any-depth --debug --save-folder-location D:\frm_git\hyundai_document_authenticator\hyundai_document_authenticator\instance\database_images
+
+## YEIDO
+#------------------
+
+>python mock_api_server.py --key-table "D:\mock_api_TEST\filtered_rows.xlsx" --search-root "D:\mock_api_TEST\mock_api_server_images" --insert-token 001 --tail-len 5 --glob-suffix "_*.tif" --any-depth --debug --save-folder-location D:\jk\gitas\hyundai_document_authenticator\hyundai_document_authenticator\instance\database_images 
+
+# no token server
+python mock_api_server.py --key-table "D:\mock_api_TEST\filtered_rows.xlsx" --search-root "D:\mock_api_TEST\mock_api_server_images" --tail-len 5 --glob-suffix "_*.tif" --any-depth --debug --save-folder-location D:\jk\gitas\hyundai_document_authenticator\hyundai_document_authenticator\instance\database_images
+
+
+## mock client
+##############
+
+python mock_api_client.py --endpoint http://127.0.0.1:5001/images --method POST --key-table "D:\mock_api_TEST\filtered_rows.xlsx" --file-name-column "파일명" --map comany_registration=사업자등록번호 --map reception_date=수신일자 --map company_name=업종명 --save-to-folder
+
+

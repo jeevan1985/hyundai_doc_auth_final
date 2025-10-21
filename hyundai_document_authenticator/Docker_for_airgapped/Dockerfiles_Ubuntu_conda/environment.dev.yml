@@ -1,0 +1,86 @@
+
+name: image-similarity-dev-env
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  # Core
+  - python=3.10
+  - pip
+  - ipykernel
+  - nbdime=4.0.2
+
+  # CPU stack for development
+  - pytorch=2.0.1
+  - torchvision=0.15.2
+  - cpuonly
+  - conda-forge::faiss-cpu
+  - numpy=1.26.4
+
+  # Pip packages (mirrors production where feasible, CPU-friendly)
+  - pip:    
+    #- -r requirements.txt
+    #- -r requirements.dev.txt
+    - numpy==1.26.4
+    - websockets==14.0
+    - timm==0.9.12
+
+    # Core scientific
+    - pandas==2.3.1
+    - scipy==1.15.3
+    - scikit-learn==1.7.1
+    - pillow==10.4.0
+    - pyarrow==21.0.0
+
+    # Frameworks & servers
+    - Flask==3.1.1
+    - Flask-Login==0.6.3
+    - Flask-Migrate==4.1.0
+    - Flask-SQLAlchemy==3.1.1
+    - Flask-WTF==1.2.2
+    - WTForms==3.2.1
+    - PyJWT==2.10.1
+    - gunicorn==21.2.0
+    - fastapi==0.116.1
+    - uvicorn==0.35.0
+    - waitress==3.0.2
+    - streamlit==1.48.0
+
+    # Data & DB
+    - qdrant-client==1.15.1
+    - psycopg2-binary==2.9.10
+
+    # AI & CV
+    - ultralytics==8.3.176
+    - transformers==4.31.0
+    - easyocr==1.7.2
+    - opencv-python==4.9.0.80
+    - paddleocr==2.10.0
+    - pytesseract==0.3.13
+    - onnxruntime==1.17.3
+
+    # Utilities
+    - matplotlib==3.10.5
+    - seaborn==0.13.2
+    - typer==0.16.0
+    - openpyxl==3.1.5
+    - Faker==37.5.3
+    - tiktoken==0.11.0
+    - ruamel.yaml==0.18.14
+    - PyYAML==6.0.2
+    - ipywidgets==8.1.7
+    - tqdm==4.67.1
+    - pydantic==2.11.7
+    - email-validator==2.2.0
+    - beautifulsoup4==4.13.4
+    - python-dotenv==1.1.1
+    - lxml==6.0.0
+    - python-docx==1.2.0
+    - psutil==7.0.0
+    - py-cpuinfo==9.0.0
+    - tenacity==8.2.3
+    - pytest==8.4.1
+
+    # Scheduler
+    - APScheduler==3.11.0

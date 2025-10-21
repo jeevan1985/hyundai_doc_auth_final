@@ -1,0 +1,159 @@
+# ==============================================================================
+#           Development Dockerfile (Debian + Mamba, Highly Commented)
+# ==============================================================================
+# This Dockerfile builds a development-ready image. Its primary purpose is to
+# create a fully-featured Mamba/Conda environment with all dependencies installed.
+# The image is specifically configured to work with bind mounts for a seamless
+# live-reloading development experience, where source code resides on the host
+# machine and is mirrored inside the container.
+
+# ==============================================================================
+# --- Stage 1: The "Builder" Stage                                           ---
+# ==============================================================================
+# Purpose: This stage is responsible for the heavy lifting of dependency
+# installation. We use Mamba's superior speed to build the complete development
+# environment from the `environment.dev.yml` file. This includes standard
+# dependencies plus development-specific tools like `pytest`, `black`, etc.
+# ------------------------------------------------------------------------------
+FROM continuumio/miniconda3:latest AS builder
+
+# Set the working directory within the builder stage. This is a temporary
+# location to store files needed for the build process.
+WORKDIR /app
+
+# --- Update Conda (Best Practice) ---
+# Before installing anything else, it's a best practice to update the conda
+# package manager itself. This ensures we have the latest bug fixes and features
+# for the package manager, leading to a more stable and reliable build process.
+#   - `conda update`: The command to update packages.
+#   - `-n base`: Specifies that we are updating a package in the 'base' conda environment.
+#   - `-c conda-forge`: Specifies the 'conda-forge' channel, which is a community-led
+#     collection of recipes and packages that is often more up-to-date than the
+#     default channel.
+#   - `conda`: The name of the package we are updating.
+#   - `-y`: Automatically answers "yes" to any prompts, making it suitable for automation.
+RUN conda update -n base -c conda-forge conda -y
+
+# --- Install Mamba for Speed ---
+# Now, we install Mamba from the 'conda-forge' channel into the base environment.
+# Mamba is a C++ reimplementation of the conda package manager that offers
+# massive speed improvements due to its parallel dependency solving and
+# downloading capabilities. For complex environments, this can reduce build
+# times from many minutes to mere seconds.
+RUN conda install -n base -c conda-forge mamba -y
+
+# --- Leverage Docker Layer Caching ---
+# Copy ONLY the environment definition file into the build context. By copying
+# this file separately, we leverage Docker's layer caching mechanism. The next,
+# very time-consuming `mamba env create` step will only be re-executed if the
+# contents of `environment.yml` have changed. If the file is unchanged, Docker
+# will use the cached layer, making subsequent builds much faster.
+COPY environment.dev.yml .
+
+# --- Create the Development Environment with Mamba ---
+# Use Mamba to create the environment as defined in `environment.dev.yml`.
+# This is typically the most time-consuming part of the build, and using Mamba
+# drastically reduces this time compared to standard Conda. The environment will
+# contain all production and development dependencies.
+RUN mamba env create -f environment.dev.yml
+
+# --- Optional Cleanup to Reduce Image Size ---
+# After the environment is created, we can clean up caches and temporary files to
+# reduce the size of the environment directory.
+#   - `conda clean`: The command to remove unused files.
+#   - `-a`: Removes all unused packages and caches (index cache, lock files, tarballs).
+#   - `-f`: Force removal of specified directories.
+#   - `-y`: Automatically answers "yes" to prompts.
+# This makes the environment we copy to the final stage as lean as possible.
+RUN conda clean -afy
+
+
+# ==============================================================================
+# --- Stage 2: The Final "Development" Image                                 ---
+# ==============================================================================
+# Purpose: This stage creates the final image that you will use for development.
+# It starts from a minimal Debian base and copies the fully-formed Mamba
+# environment from the builder stage. Crucially, it DOES NOT copy the application
+# source code.
+# ------------------------------------------------------------------------------
+FROM debian:bookworm-slim AS final
+
+# --- System Dependencies ---
+# Install only the absolute essential utilities needed for the container to run.
+# `tini` for proper process management and `netcat` for potential health checks.
+# Note that we do not need to install libraries like `libgl1` manually because
+# Conda/Mamba has already installed them correctly inside the environment.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Dynamic User Creation (CRITICAL for Development) ---
+# This is one of the most important sections for a smooth development workflow.
+# When you bind-mount your local source code into the container, the file
+# permissions can mismatch between your user on the host machine and the user
+# inside the container. This leads to "Permission Denied" errors.
+# To solve this, we accept the host's User ID (UID) and Group ID (GID) as
+# build arguments and create a user inside the container with the EXACT SAME IDs.
+# This ensures seamless file access.
+# You will build this image with:
+# docker build --build-arg HOST_UID=$(id -u) --build-arg HOST_GID=$(id -g) -f Dockerfile.mamba.dev -t my-dev-image .
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+RUN groupadd -f -g ${HOST_GID} appgroup
+RUN useradd --shell /bin/bash --uid ${HOST_UID} --gid ${HOST_GID} --create-home appuser
+
+# --- Copy Artifacts from Builder Stage ---
+# Copy the entire Mamba/Conda development environment created in the builder stage.
+# The environment name 'image-similarity-dev-env' is defined in your environment.dev.yml
+COPY --from=builder /opt/conda/envs/image-similarity-dev-env /opt/conda/envs/image-similarity-dev-env
+
+# --- Environment Variables ---
+# Set up the environment for the application.
+# Add the Mamba environment's bin directory to the system's PATH. This makes all
+# development tools like `python`, `pytest`, `gunicorn`, and `black` directly
+# available on the command line inside the container.
+ENV PATH /opt/conda/envs/image-similarity-dev-env/bin:$PATH
+# Set standard Python environment variables for logging and performance.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# --- Application Setup for Bind Mounting ---
+# Set the working directory where the application code will be mounted.
+WORKDIR /home/appuser/app
+
+# IMPORTANT: We change the ownership of the EMPTY working directory to our
+# dynamically created user. When you later run the container and mount your
+# local source code into `/home/appuser/app`, this user will have the necessary
+# permissions to read, write, and execute files, which is essential for tasks
+# like auto-reloading servers or running tests that generate cache files.
+RUN chown appuser:appgroup /home/appuser/app
+
+# Copy only the entrypoint script into the image and make it executable. The rest
+# of the code will be mounted from the host.
+COPY --chown=appuser:appgroup docker-entrypoint.sh .
+RUN chmod +x ./docker-entrypoint.sh
+
+# Switch the container's active user to the non-root user we created. All
+# subsequent commands and the main container process will run as this user.
+USER appuser
+
+# --- Port Exposure ---
+# Document the ports that the development services will listen on.
+EXPOSE 5001 8000 8501 8502
+
+# --- Execution ---
+# Use 'tini' as the main process to ensure graceful process management.
+ENTRYPOINT ["/usr/bin/tini", "--", "./docker-entrypoint.sh"]
+
+# --- Default Development Command ---
+# The default command for the development container is to start an interactive
+# bash shell. This is intentional. It keeps the container running in the
+# background so you can:
+#   1. Use `docker exec -it <container_id> /bin/bash` to get a shell inside the
+#      fully configured environment.
+#   2. Start your development server, run tests, or execute any other command
+#      from within that interactive shell.
+#   3. The `docker-compose.yml` file will typically override this CMD to start
+#      a live-reloading server directly.
+CMD ["/bin/bash"]

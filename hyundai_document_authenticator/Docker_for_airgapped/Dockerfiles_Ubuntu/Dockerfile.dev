@@ -1,0 +1,125 @@
+# ==============================================================================
+#                 Development Dockerfile (Debian-based)
+# ==============================================================================
+# This Dockerfile builds a secure, efficient development image with all the
+# environment setup for Debian base.
+
+
+# ==============================================================================
+# --- Stage 1: The "Builder" Stage                                           ---
+# ==============================================================================
+# Purpose: This stage is identical to the production builder. It compiles and
+# installs all Python dependencies into a clean environment. This ensures that
+# both development and production use the exact same set of dependencies.
+FROM python:3.10-slim-bookworm AS builder
+
+# --- Environment Variables ---
+# Set common environment variables for Python and pip.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=off
+ENV PIP_DISABLE_PIP_VERSION_CHECK=on
+
+# --- System Dependencies ---
+# Install build tools AND the 'nc' utility needed by the entrypoint script.
+# --- FIX 1: INSTALL NETCAT IN THE BUILDER STAGE ---
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Python Dependencies ---
+# Use a separate WORKDIR for the builder stage.
+WORKDIR /builder-app
+
+# ⭐ FIX: Copy the entire project context.
+COPY . .
+
+# Copy and install requirements, leveraging Docker's layer cache.
+# COPY requirements.txt .
+RUN pip install --upgrade pip
+RUN pip install -r requirements.dev.txt
+
+
+# ==============================================================================
+# --- Stage 2: The Final "Development" Image                                 ---
+# ==============================================================================
+# Purpose: This image creates a ready-to-use development environment.
+# It contains all installed dependencies but intentionally DOES NOT include the
+# application source code. The source code will be mounted from the host
+# machine using a bind mount in docker-compose for live-reloading.
+FROM python:3.10-slim-bookworm AS final
+
+# --- START: FIX FOR libGL.so.1 ---
+# Install the required system library for OpenCV/Pillow.
+# This must be done as the root user.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+# --- END: FIX ---
+
+# --- Environment Variables ---
+# Set the same environment variables for consistency.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+# Set the PYTHONPATH to ensure imports work correctly with the mounted code.
+ENV PYTHONPATH=/home/appuser/app
+
+
+# <<< CHANGE 1: ADD BUILD ARGUMENTS >>>
+# Accept the host's UID and GID during the build. Default to 1000.
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
+# <<< CHANGE 2: DYNAMIC USER CREATION >>>
+# Replace the static user creation with a dynamic one using the build arguments.
+# This is the core of the permission fix.
+RUN groupadd -f -g ${HOST_GID} appgroup
+RUN useradd --shell /bin/bash --uid ${HOST_UID} --gid ${HOST_GID} --create-home appuser
+   
+# --- Copy Artifacts from Builder Stage ---
+# Copy the pre-installed Python packages from the builder stage.
+COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
+# Copy any command-line executables installed by pip.
+COPY --from=builder /usr/local/bin /usr/local/bin
+# --- FIX 2: COPY THE 'nc' BINARY FOR THE ENTRYPOINT SCRIPT ---
+COPY --from=builder /bin/nc.openbsd /bin/nc
+
+# --- Application Setup ---
+# Create and set the working directory in the user's home directory.
+# This follows Linux conventions and creates a clear ownership boundary.
+WORKDIR /home/appuser/app
+
+# --- The Optimal Ownership and Permission Pattern ---
+# Use the '--chown' flag to set the correct owner and group AS the files are
+# being copied. This is fast and eliminates the need for a slow 'chown -R' command.
+# COPY --chown=appuser:appgroup . .   ## We will be using the copy only for production docker 
+
+# IMPORTANT: Change ownership of the empty WORKDIR. This is fast and prepares
+# the directory so our non-root 'appuser' has write permissions when we mount
+# our local source code into it. 
+# We will be RUN chown because we don't need to copy files for Developement as we will be using bind mount
+RUN chown appuser:appgroup /home/appuser/app
+
+# Copy the entrypoint script and make it executable.
+# The source code is not copied, but the entrypoint is essential for container behavior.
+COPY --chown=appuser:appgroup docker-entrypoint.sh .
+RUN chmod +x ./docker-entrypoint.sh
+
+# Switch to the non-root user for all subsequent operations.
+USER appuser
+
+# Set the entrypoint for the development container
+ENTRYPOINT ["./docker-entrypoint.sh"]
+
+# --- Port Exposure ---
+# Document which ports the application might use.
+EXPOSE 5001 8000 8501 8502
+
+# --- Default Command ---
+# The default command for a development container is often an interactive shell.
+# This allows the developer to `docker exec` into the container and run
+# commands manually (e.g., `flask run`, `pytest`). The container will start
+# and wait indefinitely.
+CMD ["scheduler"]

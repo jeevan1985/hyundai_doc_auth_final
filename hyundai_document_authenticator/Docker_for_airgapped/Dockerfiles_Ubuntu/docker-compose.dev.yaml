@@ -1,0 +1,145 @@
+# ==============================================================================
+#            DEVELOPMENT OVERRIDE for Debian-based Environments
+# ==============================================================================
+#
+# --- PURPOSE ---
+# This file contains the overrides needed for a local development environment.
+# It MERGES with 'docker-compose.yaml' to create a complete dev setup.
+# Key Features:
+#   - Creates a SEPARATE, isolated database for development.
+#   - Enables live code reloading by mounting the source code.
+#   - Runs application servers in debug mode.
+#
+# --- HOW TO RUN ---
+# docker-compose -f docker-compose.yaml -f docker-compose.dev.yaml --profile postgres up --build
+# (The '--profile postgres' flag is now required to activate the db service)
+# ==============================================================================
+
+# ==============================================================================
+#                 --- DEVELOPMENT OVERRIDE TEMPLATE (YAML ANCHOR) ---
+# ==============================================================================
+x-dev-app-overrides: &dev-overrides
+  # OVERRIDE 1: Use the Development Dockerfile.
+  # This tells Compose to build locally instead of using a production image.
+  build:
+    context: .
+    dockerfile: Dockerfile.dev
+    args:
+      HOST_UID: ${UID:-1000}
+      HOST_GID: ${GID:-1000}
+
+  # OVERRIDE 2: Enable Live Code Reloading.
+  # This replaces production volumes with a direct mount of your source code.
+  volumes:
+      # Mount the code
+      - .:/home/appuser/app:z
+      # Explicitly mount the data directories as BIND MOUNTS for development.
+      # This OVERRIDES the named volumes from the base docker-compose.yaml.
+      - ./instance:/home/appuser/app/instance:z
+      - ./logs:/home/appuser/app/logs:z
+      - ./downloads:/home/appuser/app/downloads:z
+
+  # OVERRIDE 3: Depend on the Correct Services for Dev.
+  # This ensures the app waits for the dev database and qdrant.
+  depends_on:
+    db:
+      condition: service_healthy # The dependency is now required in dev.
+    qdrant:
+      condition: service_healthy
+      required: false # Make this optional to match the production file logic.
+
+# ==============================================================================
+#                      --- DEVELOPMENT SERVICE DEFINITIONS ---
+# ==============================================================================
+services:
+  # --- 1. PostgreSQL Development Database (OVERRIDE) ---
+  # This 'db' service completely REPLACES the 'db' service from the main file.
+  # It is designed specifically for development.
+  db:
+    # We still use profiles, so the dev database only starts when requested.
+    profiles: ["postgres"]
+    image: postgres:15-alpine
+    container_name: postgres_db_dev_service # Use a distinct name.
+    restart: unless-stopped
+    volumes:
+      # --- CRITICAL ---
+      # Use a SEPARATE named volume to keep development data isolated from production.
+      - postgres_data_dev:/var/lib/postgresql/data
+    env_file: .env
+    environment:
+      # We use the standard Postgres variables here for a simple, single-database setup.
+      # This assumes your .env has POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD.
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      # Expose the PostgreSQL port to the host machine. This allows you to connect
+      # to the dev database with a local GUI tool like DBeaver or pgAdmin.
+      - "5433:5432" # Use 5433 on the host to avoid conflicts with a local Postgres install.
+
+  # --- 2. Qdrant Service ---
+  # We do not need to redefine Qdrant. It will be inherited perfectly
+  # from the main 'docker-compose.yaml' file.
+
+  # --- 3. Flask API Service (Development Mode) ---
+  flask_api:
+    <<: *dev-overrides # Inherit build, volume, and base dependency settings.
+    # [OPTIONAL] Explicitly override the container name for clarity in development.
+    container_name: flask_api_dev_service
+    command: flask run --host=0.0.0.0 --port=5001 --debug
+
+  # --- 4. FastAPI Service (Development Mode) ---
+  fastapi_api:
+    <<: *dev-overrides
+    # [OPTIONAL] Explicitly override the container name for clarity in development.
+    container_name: fastapi_api_dev_service
+    command: uvicorn fastapi_app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # --- 5. GUI Service (Development Mode) ---
+  gui:
+    <<: *dev-overrides
+    container_name: gui_dev_service
+    command: flask --app gui_app.app.py run --host=0.0.0.0 --port=8501 --debug
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      flask_api:
+        condition: service_started
+
+  # --- 6. FastAPI GUI Service (Development Mode) ---
+  fastapi_gui:
+    <<: *dev-overrides
+    container_name: fastapi_gui_dev_service
+    command: uvicorn fastapi_gui.main:app --host 0.0.0.0 --port 8502 --reload
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      fastapi_api:
+        condition: service_started
+
+  cli_runner:
+    <<: *dev-overrides # Inherits the build args and volume mount!
+    container_name: cli_runner_dev_service
+    # No command is needed here, as it's provided on the command line.
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+      qdrant:
+        condition: service_healthy
+        required: false
+
+
+
+# ==============================================================================
+#                      --- DEVELOPMENT NAMED VOLUMES ---
+# ==============================================================================
+# This section formally declares any NEW named volumes introduced by this dev file.
+volumes:
+  postgres_data_dev:
+    # All other volumes (qdrant_data, downloads_data, etc.) are automatically
+    # inherited from the main docker-compose.yaml file.

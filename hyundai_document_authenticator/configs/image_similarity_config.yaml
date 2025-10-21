@@ -1,0 +1,272 @@
+# TIF Document Similarity - Minimal Production Configuration
+
+# How TIFs are fed into the pipeline
+input_mode:
+  # [OPTIONAL] Controls how TIFs are fed into the pipeline. Default: "key"
+  #   - "tif": Standard folder-based mode (indexing_task.input_tif_folder_for_indexing and search_task.input_tif_folder_for_search)
+  #   - "key": Use external/key_input/key_input_config.yaml to stage TIFs per batch
+  #   Allowed values: {tif, key}. Any other value is logged and falls back to 'key'.
+  doc_input_start: key
+
+# Application logging controls
+logging:
+  # [OPTIONAL] Toggle append-only JSONL logging for failed key-driven API filename requests. Default: true
+  # When true, failures detected in key-driven API mode are appended to
+  # hyundai_document_authenticator/logs/failed_requests.log.
+  enable_failed_key_request_logging: true
+  # [OPTIONAL] Log maintenance (per-module). Controls file cleanup and optional backup before deletion.
+  log_maintenance:
+    # [OPTIONAL] When true, make a copy of old log files with '.bk' suffix before deletion.
+    # Default (hardcoded): false
+    backup_logs: false
+    # [OPTIONAL] Remove log files older than this many days.
+    # Default (hardcoded): 7
+    remove_logs_days: 7
+
+# Feature extractor used to embed cropped photos
+feature_extractor:
+  # [OPTIONAL] Backbone architecture. Default: "efficientnet"
+  model_name: efficientnet
+  # [OPTIONAL] Expected embedding dimension for the chosen model; auto-corrected when enable_feature_dimension_fixing=true. Default: model-specific
+  feature_dimension: 1280
+  # [OPTIONAL] Weights source (local path or model ID). Default: (none) — provide a compatible local path/ID for your environment
+  # some models are like: models/efficientnet/efficientnet_b2_rwightman-bcdf34b7.pth,  models/efficientnet/efficientnet_b0_weights.pth, etc
+  pretrained_model_path_or_id: models/efficientnet/efficientnet_b0_weights.pth # models/efficientnet/efficientnet_b2_rwightman-bcdf34b7.pth # models/efficientnet/efficientnet_b0_weights.pth
+  # [OPTIONAL] Inference device policy: auto|cuda|cpu. Default: "auto"
+  device: auto
+  # [OPTIONAL] Verify and correct feature_dimension at runtime when mismatched. Default: true
+  enable_feature_dimension_fixing: true
+
+# Vector database configuration (FAISS | Qdrant | Bruteforce)
+vector_database:
+  # [OPTIONAL] provider options: faiss | qdrant | bruteforce. Default: faiss
+  provider: faiss #qdrant #faiss #bruteforce  
+  # [OPTIONAL] Allow brute-force fallback if FAISS/Qdrant index is unavailable. Default: true
+  allow_fallback: true
+  # [OPTIONAL] fallback_choice: choose fallback behavior when allow_fallback is true and index load fails.
+  #   - transient: search only within the current batch (no base index) : default.
+  #   - bruteforce: search against the image DB folder using brute-force.
+  # Default: transient
+  fallback_choice: transient  # options: transient | bruteforce
+  # [OPTIONAL] build_index_on_load_failure: when true, automatically trigger index building if index loading fails.
+  # Uses indexing_task.input_tif_folder_for_indexing (preferred) or indexing_task.image_folder_to_index). Default: false
+  build_index_on_load_failure: true
+  # [OPTIONAL] fallback_choice: choose fallback behavior when allow_fallback is true and index load fails.
+  #   - transient: search only within the current batch (no base index) : default.
+  #   - bruteforce: search against the image DB folder using brute-force.
+
+  faiss:
+    # [OPTIONAL] Output directory for FAISS artifacts. Default: instance/faiss_indices
+    output_directory: instance/faiss_indices
+    # [OPTIONAL] Filename stem for FAISS artifacts. Default: faiss_collection
+    filename_stem: faiss_collection
+    # [OPTIONAL] index_type options: flat | ivf | hnsw. Default: flat
+    index_type: flat
+    # [OPTIONAL] IVF/HNSW parameters (used only when selected). Defaults (code): ivf_nlist=100, ivf_nprobe_search=10, hnsw_m=32, hnsw_ef_construction=40, hnsw_efsearch_search=32
+    ivf_nlist: 1024
+    ivf_nprobe_search: 32
+    hnsw_m: 32
+    hnsw_ef_construction: 40
+    hnsw_efsearch_search: 50
+    # [OPTIONAL] Unified partition capacity for both FAISS and Qdrant providers.
+    # For FAISS, this defines maximum items per shard file. Code default capacity when enabled: 250000. Use null/"legacy"/"single"/"none" to disable sharding.
+    #partition_capacity: null
+    # [LEGACY] Kept for backward compatibility until full migration.
+    # Index file pattern: {filename_stem}_{model}_{index_type}_sNNNN.index
+    # Mapping file pattern: {filename_stem}_{model}_{index_type}_sNNNN_mapping.pkl
+    total_indexes_per_file: 5 #null #5 #250000
+
+  # Qdrant Configuration (used only if provider == "qdrant")
+  qdrant:
+    # [OPTIONAL] On-disk embedded mode location (or ":memory:" for ephemeral). Default: "instance/qdrant_db"
+    location: "instance/qdrant_db"
+    # [RECOMMENDED-DEV] Use a per-run unique embedded location to avoid lock contention in local/dev runs.
+    # When true and 'location' is set, the effective path becomes <location>/<run_identifier>. Default: false
+    unique_location_per_run: false
+
+    # [OPTIONAL] Network/server mode connection details. Defaults: host=localhost, port=6333, grpc_port=6334, prefer_grpc=false
+    host: "localhost"  # Env override: QDRANT_HOST
+    port: 6333  # Env override: QDRANT_PORT
+    grpc_port: 6334  # Env override: QDRANT_GRPC_PORT
+    prefer_grpc: false
+
+    # [OPTIONAL] API key and TLS. Defaults: api_key=${QDRANT_API_KEY}, https_enable=false
+    api_key: ${QDRANT_API_KEY}  # Env override: QDRANT_API_KEY
+    https_enable: false
+
+    # [OPTIONAL] Collection and distance metric. Defaults: collection_name_stem="image_similarity_collection", distance_metric="Cosine"
+    collection_name_stem: "image_similarity_collection"
+    distance_metric: "Cosine"  # Cosine | Dot | Euclid
+    # [OPTIONAL] Quantization, on-disk HNSW, and force recreate. Defaults: enable_quantization=false, on_disk_hnsw_indexing=true, force_recreate_collection=false
+    enable_quantization: false
+    on_disk_hnsw_indexing: true
+    force_recreate_collection: false
+    # [OPTIONAL] Unified partition capacity for both FAISS and Qdrant providers.
+    # For Qdrant, this defines maximum points per collection shard. Use null/"legacy"/"single"/"none" to disable sharding.
+    partition_capacity: 500000
+    # [LEGACY] Kept for backward compatibility until full migration.
+    # When set to integer N, points are inserted into collections with suffix _sNNNN as capacity is reached.
+    max_points_per_collection: 500000
+
+# Indexing from TIFs → extracted crops → FAISS index
+indexing_task:
+  # [OPTIONAL] Root where cropped images will be written and indexed. Default: instance/database_images
+  image_folder_to_index: instance/database_images
+  # [OPTIONAL] TIF source folder for building the index (overridden by CLI --folder). Default: ./data_real
+  input_tif_folder_for_indexing: ./data_real
+  # [OPTIONAL] Batch size for embedding during indexing. Default: 32
+  batch_size: 32
+  # [OPTIONAL] Clear and rebuild the index from scratch. Default: false
+  force_rebuild_index: false
+  # [OPTIONAL] Recursively scan image_folder_to_index for updates. Default: false
+  scan_for_database_subfolders: false
+  # [OPTIONAL] IVF training controls (used when vector_database.faiss.index_type == "ivf"). Defaults: ivf_train_samples_max=500, ivf_train_samples_ratio=0.1
+  ivf_train_samples_max: 500
+  ivf_train_samples_ratio: 0.1
+  # [OPTIONAL] Remove image_folder_to_index after successful indexing. Default: false
+  delete_image_folder_after_indexing: false
+
+# TIF document batch search configuration
+search_task:
+  # [OPTIONAL] TIF query folder (overridden by CLI --folder). Default: ./data_real
+  input_tif_folder_for_search: ./data_real
+
+  # [OPTIONAL] Per-photo and per-document aggregation settings. Defaults: top_k=5, top_doc=7, top_doc_global=top_doc when omitted, aggregation_strategy="max"
+  top_k: 5               # neighbors per cropped photo
+  top_doc: 7             # documents to return per query
+  top_doc_global: 7      # documents to include in global run-level summary (defaults to top_doc if omitted)
+  aggregation_strategy: max  # max | sum | mean
+
+  # [OPTIONAL] Output and organization. Defaults (code): save_outputs_to_folder=false, save_global_top_docs=false, new_query_new_subfolder=false,
+  # output_folder_for_results="instance/search_results", search_summary_json_filename="search_results_summary.json",
+  # copy_query_image_to_output=false, copy_similar_images_to_output=false, save_query_in_separate_subfolder_if_copied=false,
+  # save_search_summary_json=false, generate_tif_previews=false (privacy mode may disable), create_per_query_subfolders_for_tif=false
+  save_outputs_to_folder: true
+  save_global_top_docs: true
+  new_query_new_subfolder: true
+  output_folder_for_results: instance/search_results
+  search_summary_json_filename: search_results_summary.json
+  copy_query_image_to_output: false
+  copy_similar_images_to_output: false
+  save_query_in_separate_subfolder_if_copied: true
+  save_search_summary_json: true
+  generate_tif_previews: false
+  create_per_query_subfolders_for_tif: true
+
+  # [OPTIONAL] Fallback brute-force DB (used when FAISS index is not loaded). Defaults: bruteforce_db_folder=instance/database_images, bruteforce_batch_size=32
+  bruteforce_db_folder: instance/database_images
+  bruteforce_batch_size: 32
+
+  # [OPTIONAL] Override base directory for transient embeddings and key map artifacts (per-run subfolder is appended).
+  # Default: instance/query_image_embeddings
+  query_embed_index:
+    output_path_query_embed_index: instance/query_image_embeddings
+
+  # Optional DB save and explainability payload
+  # [OPTIONAL] Defaults: save_results_to_postgresql=true, doc_sim_img_check=false, doc_sim_img_check_max_k=top_k
+  save_results_to_postgresql: true
+  doc_sim_img_check: true
+  doc_sim_img_check_max_k: 10
+
+  # [OPTIONAL] Column suppression for outputs (CSV/JSON/DB); provide names to hide. Default: []
+  # Supported names include run_identifier, requesting_username, search_time_stamp, query_document, matched_query_document,
+  # top_similar_docs, sim_img_check, image_authenticity, fraud_doc_probability, global_top_docs
+  remove_columns_from_results: [] # ['global_top_docs', 'fraud_doc_probability']
+
+  # ------------------------------------------------------------------------------------
+  # PRIVACY-FIRST, BATCH-FIRST AUGMENTATION (Phase A then Phase B)
+  # ------------------------------------------------------------------------------------
+  # [OPTIONAL] Enable index_query_doc_images to include batch embeddings for within-batch similarity. Default: false
+  index_query_doc_images: true
+  # [OPTIONAL] Augmentation mode when index_query_doc_images is true. Default: transient_query_index
+  # Augmentation mode when index_query_doc_images is true.
+  # - persistent_query_index: Add batch embeddings to main corpus (FAISS/Qdrant).
+  # - transient_query_index:  Keep batch embeddings in a per-run side index; do not modify main corpus.
+  # Default: transient_query_index
+  augmentation_mode: persistent_query_index #transient_query_index
+  # [OPTIONAL] Privacy mode: forbid persisting crops to disk (bruteforce disallowed in privacy mode). Default: true
+  privacy_mode: true
+  # [OPTIONAL] Allow a query's parent to appear as a match  (self-match). 
+  # For document case both the query_document and matched_query_document will be
+  # removed from the results. Default: false
+  include_query_image_to_result: true
+  # [OPTIONAL] Create/transient per-run index structures for batch. Default: true
+  transient_batch_index: true
+  # [OPTIONAL] Permit disk staging of crops when privacy mode is active. Default: false
+  allow_disk_staging_for_bruteforce: false
+
+# Optional: PostgreSQL target for TIF results
+results_postgresql:
+  # [OPTIONAL] DB connection settings; may use env vars. Defaults: (no defaults; rely on env variables when used)
+  database_name: ${POSTGRES_DB}  # Env override: POSTGRES_DB
+  host: ${POSTGRES_HOST}  # Env override: POSTGRES_HOST
+  port: ${POSTGRES_PORT}  # Env override: POSTGRES_PORT
+  user: ${POSTGRES_USER}  # Env override: POSTGRES_USER
+  password: ${POSTGRES_PASSWORD}  # Env override: POSTGRES_PASSWORD
+  # [OPTIONAL] Target table name. Default: doc_similarity_results
+  table_name_doc_sim: doc_similarity_results  # Env override: POSTGRES_TABLE_NAME (if set)
+  # [OPTIONAL] target table for image-only similarity results (find_sim_images.py). Created automatically if missing.
+  table_name_img_sim: image_similarity_results  # Env override: POSTGRES_TABLE_NAME (if set)
+  # [OPTIONAL] Export debug CSVs under run folder. Default: false
+  debug_export_csv: true
+
+# OCR page finder and text normalization controls (used by TIF page search)
+searcher_config:
+  # [OPTIONAL] Defaults: search_text="가맹점 실사 사진", language=ko, ocr_backend=paddleocr, search_mode=exact_phrase,
+  # allow_normalization=true, remove_spaces_in_normalization=true, recognized_text_debug=false, search_location.top=0.05,
+  # use_offline_models=false, use_angle_cls=true, use_gpu_for_paddle=true, paddle_batch_size=6
+  search_text: "가맹점 실사 사진"
+  language: ko
+  ocr_backend: paddleocr
+  search_mode: exact_phrase
+  allow_normalization: true
+  remove_spaces_in_normalization: true
+  recognized_text_debug: false
+  search_location:
+    top: 0.05
+  use_offline_models: false
+  use_angle_cls: true
+  use_gpu_for_paddle: true
+  paddle_batch_size: 6
+
+# Photo extraction settings (YOLO or BBox) [OPTIONAL OVERRIDING CONFIG]
+photo_extractor_config:
+  # [OPTIONAL] Extraction mode. Default: bbox
+  photo_extraction_mode: bbox   # yolo | bbox
+  # [OPTIONAL] Enable extractor debug logging. Default: false
+  photo_extractor_debug: false
+  yolo_object_detection:
+    # [OPTIONAL] YOLO model path. Default: trained_model/yolo_photo_extractor/weights/best.pt
+    model_path: "trained_model/yolo_photo_extractor/weights/best.pt"
+    inference:
+      # [OPTIONAL] Defaults: confidence_threshold=0.25, iou_threshold=0.45, imgsz=640, target_object_names=[]
+      confidence_threshold: 0.25
+      iou_threshold: 0.45
+      imgsz: 640
+      target_object_names: []
+  bbox_extraction:
+    # [OPTIONAL] Defaults: bbox_format=xyxy, normalized=false, bbox_list=[...]
+    bbox_format: xyxy
+    normalized: false
+    bbox_list:
+      - [171, 236, 1480, 1100]
+      - [171, 1168, 1480, 2032]
+
+# Optional: Photo authenticity classification (default OFF). When disabled or if the
+# classifier fails to load, the pipeline runs unchanged without authenticity outputs.
+photo_authenticity_classifier_config:
+  # [OPTIONAL] Master switch. Default: false
+  check_image_authenticity: true
+  # [OPTIONAL] Non-authentic classes list. Default: []
+  # Example: ["moire", "recaptured", "printed"]
+  non_authentic_image_classes: ["moire", "recaptured", "printed"]
+  # [OPTIONAL] Similarity threshold for fraud probability logic. Default: 0.8
+  similar_doc_flag_threshold: 0.8
+  # [OPTIONAL] Path to classifier config YAML. Default: external/image_authenticity_classifier/classifier_config.yaml
+  classifier_config_path: external/image_authenticity_classifier/classifier_config.yaml
+
+# Optional: Config file management
+# Controls how config_loader.save_config() behaves if used by tools.
+config_saving:
+  # [OPTIONAL] Create timestamped backup on config save. Default: true
+  create_backup_on_config_save: true

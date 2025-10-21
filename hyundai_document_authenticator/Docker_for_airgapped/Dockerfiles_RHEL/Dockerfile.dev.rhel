@@ -1,0 +1,164 @@
+# ==============================================================================
+#                 Development Dockerfile (RHEL-based)
+# ==============================================================================
+# This Dockerfile builds a secure, efficient development image with all the
+# environment setup for Red Hat Universal Base Images (UBI).
+
+# ==============================================================================
+# --- Stage 1: The "Builder" Stage (RHEL UBI 8)                              ---
+# ==============================================================================
+# Purpose: This stage is now aligned with the production builder. It uses the
+# specialized Python image to ensure dependencies are installed to the correct
+# SCL path, preventing the "empty pip list" issue in development.
+# --- FIX 1: USE THE SPECIALIZED PYTHON IMAGE FOR THE BUILDER ---
+FROM registry.access.redhat.com/ubi8/python-311:latest AS builder
+
+# --- Environment Setup ---
+# Set common Python environment variables for optimized container behavior.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+# Set common pip environment variables to optimize installs.
+ENV PIP_NO_CACHE_DIR=off
+ENV PIP_DISABLE_PIP_VERSION_CHECK=on
+
+# --- FIX 2: SWITCH TO ROOT TO INSTALL PACKAGES ---
+# The python-311 image starts as a non-root user, so we must switch to root
+# to use the 'dnf' package manager.
+USER root
+
+# # --- System Dependencies ---
+# # Install Python 3.11, its pip package, its development headers (`-devel`),
+# # and build tools using 'dnf'.
+# # 'python3.11-devel' is critical for compiling C-extensions.
+# # '--nodocs' saves space. 'dnf clean all' is crucial for keeping the layer small.
+# RUN dnf install -y --nodocs python3.11 python3.11-pip python3.11-devel gcc gcc-c++ make \
+#     && dnf clean all
+
+# --- System Dependencies ---
+# Install build tools and the 'nc' utility needed by the entrypoint script.
+# We no longer need to install python3.11 itself as it's part of the base image.
+RUN dnf install -y --nodocs gcc gcc-c++ make nmap-ncat \
+    && dnf clean all
+
+# --- Python Dependencies ---
+# Set the working directory according to Red Hat's SCL standards.
+WORKDIR /opt/app-root/src
+
+# ⭐ Copy and install requirements, leveraging Docker's layer caching.
+# COPY requirements.txt .
+#THE FIX (Part 1): Copy the entire project context.
+# This ensures that when pip sees the "-e ." line in requirements.txt,
+# it has access to your setup.py to build the executables.
+COPY . .
+
+
+RUN python3.11 -m pip install --upgrade pip
+RUN python3.11 -m pip install -r requirements.dev.txt
+
+
+# ==============================================================================
+# --- Stage 2: The "Final" Development Image (RHEL UBI 8 Python)             ---
+# ==============================================================================
+# Purpose: This image creates a ready-to-use development environment.
+# It contains all installed dependencies but intentionally DOES NOT include the
+# application source code. The source code will be mounted from the host
+# machine using a bind mount in docker-compose for live-reloading.
+FROM registry.access.redhat.com/ubi8/python-311:latest AS final
+
+# --- FIX: ADD USER root TO THIS STAGE ---
+# You must switch to root again because this is a new stage.
+USER root
+
+# --- START: FIX FOR libGL.so.1 on RHEL ---
+# Install the required system library for OpenCV/Pillow using dnf.
+RUN dnf install -y --nodocs \
+    mesa-libGL \
+    glib2 \
+    && dnf clean all
+# --- END: FIX ---
+
+# --- Environment Variables ---
+# Set the same Python environment variables for consistency.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+# Set the PYTHONPATH to ensure imports work correctly with the mounted code.
+ENV PYTHONPATH=/opt/app-root/src
+
+# ==============================================================================
+# <<< FIX 1: ADD BUILD ARGUMENTS TO ACCEPT HOST UID/GID >>>
+# ==============================================================================
+# Accept the host's UID and GID during the build. Default to ARG HOST_UID=1001, which is
+# the standard UBI non-root user, but this allows for an override.
+ARG HOST_UID=1001
+# Default GID 0 (root group) is common in UBI
+ARG HOST_GID=0 
+
+# ==============================================================================
+# <<< FIX 2: DYNAMICALLY CREATE A USER MATCHING THE HOST >>>
+# ==============================================================================
+# This replaces the static `USER 1001` switch. We now create a user with the
+# provided UID/GID to ensure permissions match the host for bind mounts.
+# We create a group if one with the GID doesn't exist, then add the user.
+RUN groupadd -f -g ${HOST_GID} appgroup && \
+    useradd --shell /bin/bash --uid ${HOST_UID} --gid ${HOST_GID} --no-create-home --home-dir /opt/app-root/src appuser
+
+# --- Copy Artifacts from Builder Stage ---
+# The rhel Python image places site-packages in a version-specific directory.
+# We copy the installed dependencies from the 'builder' stage.
+# NOTE: The pip install in the builder stage places libraries in a standard system
+# path that the final rhel Python image understands and uses.
+# These are copied as root.
+COPY --from=builder /opt/app-root/lib64/python3.11/site-packages /opt/app-root/lib64/python3.11/site-packages
+# Copy any command-line executables installed by pip (like 'gunicorn', 'flask', etc.).
+# These are placed relative to the builder's WORKDIR.
+# COPY --from=builder /opt/app-root/bin /opt/app-root/bin # might not work since /opt/app-root/bin destination is not public directory
+# Copy the executables to a standard system path that is always available.
+COPY --from=builder /opt/app-root/bin /usr/local/bin
+
+# --- FIX ---
+# Copy ONLY the 'nc' binary from the builder. This makes the final image
+# leaner and more secure than installing the entire 'nmap-ncat' package here.
+COPY --from=builder /usr/bin/nc /usr/bin/nc
+
+# --- Prepare Mount Point ---
+# Set the working directory. The UBI Python image is pre-configured so the
+# default user (1001) has write permissions here. This prepares the directory
+# for the code that will be bind-mounted from the host.
+WORKDIR /opt/app-root/src
+
+# --- THE CORRECT PERMISSION FIX for DEVELOPMENT ---
+# Explicitly set ownership of the WORKDIR using the numeric UID and GID.
+# This ensures our newly created 'appuser' owns the directory where the code
+# will be mounted, solving permission errors with bind mounts.
+RUN chown appuser:appgroup /opt/app-root/src
+
+# Set ownership for the site-packages directory so that the non-root 'appuser'
+# has permission to run 'pip install -e .' and create editable install files.
+RUN chown -R appuser:appgroup /opt/app-root/lib64/python3.11/site-packages
+# ==============================================================================
+
+# Copy the entrypoint script into the WORKDIR.
+# Use --chown to ensure it's owned by the user you just created.
+COPY --chown=appuser:appgroup docker-entrypoint.sh .
+
+# Make the entrypoint script executable. This must be done as root.
+RUN chmod +x ./docker-entrypoint.sh
+
+# Set the entrypoint for the development container.
+ENTRYPOINT ["./docker-entrypoint.sh"]
+
+# --- Final User Switch (Security Best Practice) ---
+# Switch to the default non-root user (UID 1001) provided by the UBI image.
+# We did not need to create this user; it comes with the base image.
+# All subsequent commands in the container will run as this user.
+USER appuser
+
+# --- Port Exposure ---
+# Document which ports the application might use.
+EXPOSE 5001 8000 8501 8502
+
+# --- Default Command ---
+# The default command for a development container is often an interactive shell
+# or a command that waits indefinitely. This allows the developer to `exec`
+# into the container and run commands manually (e.g., `flask run --debug`).
+CMD ["/bin/bash"]

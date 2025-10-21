@@ -1,0 +1,40 @@
+# Image Authenticity Classifier — Minimal Config
+#
+# Purpose: Minimal, end-user-friendly settings to run the classifier.
+# Path resolution: All relative paths are resolved relative to THIS file.
+# Quick start:
+#   1) Point weights_path to your .pth checkpoint.
+#   2) Set labels to match the classes your checkpoint was trained on.
+#   3) (Optional) Choose device: auto|cuda|cpu.
+#
+# Notes on defaults (from code):
+#   - If no config is provided, the code defaults to:
+#       model_name="resnet18", device="auto",
+#       labels=["original", "unknown"], score_threshold=0.0,
+#       transforms={image_size:224, mean:[0.485,0.456,0.406], std:[0.229,0.224,0.225]}, model_source="auto".
+#   - If weights are missing/unreadable, the classifier returns {class_name:"unknown", score:0.0}.
+#   - Avoid embedding secrets; none are needed here.
+
+# Backbone model
+# Purpose: Selects the feature extractor architecture.
+# Fallback default if omitted: "resnet18".
+# Allowed options (examples): resnet18, resnet50, efficientnet_b0, efficientnet_b2 (depends on installed libs).
+model_name: resnet18
+
+# Model checkpoint path (.pth)
+# Purpose: Loads learned weights; required for meaningful predictions.
+# Fallback default if omitted: null (no weights; returns unknown results).
+# Recommendation: Use a relative path. Example assumes repo structure.
+weights_path: ../../trained_model/auth_classifier/resnet18_auth.pth
+
+# Class labels (ordered)
+# Purpose: Maps output indices to class names; must match checkpoint training classes.
+# Fallback default if omitted or empty: ["original", "unknown"].
+# Allowed: any non-empty list of strings. Keep order consistent with training.
+labels: ["original", "moire", "recaptured", "printed"]
+
+# Device selection
+# Purpose: Controls compute device policy.
+# Fallback default if omitted: "auto" (prefer CUDA when available, else CPU).
+# Allowed: auto | cuda | cpu
+device: auto

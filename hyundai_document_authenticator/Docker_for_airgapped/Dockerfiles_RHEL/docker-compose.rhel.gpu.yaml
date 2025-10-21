@@ -1,0 +1,219 @@
+# ==============================================================================
+#      DUAL-PURPOSE Production & Development Compose File (RHEL/EL-based)
+# ==============================================================================
+# This file defines the application stack for RHEL or EL-compatible systems.
+# It mirrors the GPU-enabled compose setup and works for both production
+# and development.
+#
+# --- HOW TO RUN ---
+# 1) Production (pre-built image):
+#    docker compose --profile postgres up -d
+# 2) Development (build locally):
+#    - Uncomment the build: section in the x-app-base anchor
+#    - docker compose --profile postgres up -d --build
+# ==============================================================================
+
+x-app-base: &app-base
+  # build:
+  #   context: .
+  #   dockerfile: Dockerfile.rhel
+  image: jk-image-similarity-app:v1.0.0
+  restart: unless-stopped
+  env_file: .env
+  volumes:
+    - ./configs:/home/appuser/app/configs:ro
+    - downloads_data:/home/appuser/app/downloads
+    - instance_data:/home/appuser/app/instance
+    - logs_data:/home/appuser/app/logs
+
+  # GPU access for docker compose (non-Swarm)
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
+  environment:
+    - POSTGRES_HOST=${POSTGRES_HOST_EXTERNAL:-db}
+    - POSTGRES_PORT=${POSTGRES_PORT_EXTERNAL:-5432}
+    - POSTGRES_USER_HOST=${POSTGRES_HOST_EXTERNAL:-db}
+    - POSTGRES_USER_PORT=${POSTGRES_PORT_EXTERNAL:-5432}
+    - QDRANT_HOST=${QDRANT_HOST_EXTERNAL:-qdrant}
+    - QDRANT_PORT=${QDRANT_PORT_EXTERNAL:-6333}
+    - QDRANT_MODE=${QDRANT_MODE:-server}
+
+services:
+  app_scheduler:
+    <<: *app-base
+    container_name: app_scheduler_rhel_gpu_service
+    gpus: all
+    # Uses the image default CMD (scheduler via entrypoint default)
+    networks:
+      - my-app-network
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  db:
+    profiles: ["postgres"]
+    image: postgres:15-alpine
+    container_name: postgres_db_prod_service
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - my-app-network
+    env_file: .env
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_USER_DB_NAME=${POSTGRES_USER_DB}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    profiles: ["qdrant"]
+    image: qdrant/qdrant:v1.9.2
+    container_name: qdrant_db_prod_service
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - my-app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flask_api:
+    profiles: ["flask_api", "gui"]
+    <<: *app-base
+    container_name: flask_api_prod_service
+    command: flask-api
+    gpus: all
+    networks:
+      - my-app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5001/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "5001:5001"
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  fastapi_api:
+    profiles: ["fastapi_api", "fastapi_gui"]
+    <<: *app-base
+    container_name: fastapi_api_prod_service
+    command: fastapi-api
+    gpus: all
+    networks:
+      - my-app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+  gui:
+    profiles: ["gui"]
+    <<: *app-base
+    container_name: gui_prod_service
+    command: gui
+    gpus: all
+    networks:
+      - my-app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://${FLASK_API_HOST_EXTERNAL:-flask_api}:${FLASK_API_PORT_EXTERNAL:-5001}/api/v1
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      flask_api:
+        condition: service_started
+
+  fastapi_gui:
+    profiles: ["fastapi_gui"]
+    <<: *app-base
+    container_name: fastapi_gui_prod_service
+    command: fastapi-gui
+    gpus: all
+    networks:
+      - my-app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501/healthz || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    ports:
+      - "8502:8502"
+    environment:
+      - API_BASE_URL=http://${FASTAPI_API_HOST_EXTERNAL:-fastapi_api}:${FASTAPI_API_PORT_EXTERNAL:-8000}/api/v1
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      fastapi_api:
+        condition: service_started
+
+  cli_runner:
+    profiles: ["cli"]
+    <<: *app-base
+    gpus: all
+    networks:
+      - my-app-network
+    depends_on:
+      db:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  downloads_data:
+  instance_data:
+  logs_data:
+
+networks:
+  my-app-network:
+    name: my-app-network
+    driver: bridge

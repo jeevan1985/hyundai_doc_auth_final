@@ -1,0 +1,47 @@
+# Image Authenticity Classifier Configuration (example)
+# This configuration is used by ImageAuthenticityClassifier to load the
+# model, labels, device, thresholds and preprocessing transforms.# Backbone model
+# [OPTIONAL] Supported example names in this reference implementation: resnet18 | efficientnet_b0
+# Default: resnet18
+model_name: resnet18
+
+# Weights path (.pth)
+# [OPTIONAL] If missing/unavailable, the classifier falls back to a safe stub that returns
+# {"class_name": "unknown", "score": 0.0}.
+# Default: None (provide a valid path to enable a real model)
+weights_path: trained_model/auth_classifier/resnet18_auth.pth
+
+# Device selection
+# [OPTIONAL]
+# - auto: prefer CUDA if available, else CPU
+# - cuda: force CUDA (raises if not available)
+# - cpu:  force CPU
+# Default: auto
+device: auto
+
+# Labels
+# [OPTIONAL] Ordered labels (strict). The predicted index maps to this list in order.
+# Default: ["original", "unknown"] when not provided
+labels: ["original", "moire", "recaptured", "printed"]
+
+# Global score threshold
+# [OPTIONAL] Applied after softmax. Not used in this pipeline for gating, but may be useful for standalone usage.
+# Default: 0.0
+score_threshold: 0.0
+
+# Per-class thresholds (overrides global for specific classes)
+# [OPTIONAL] Default: {}
+per_class_thresholds: {}
+
+# Preprocessing transforms
+# [OPTIONAL] The classifier will interpret these values to build torchvision or timm-compatible transforms.
+# Defaults when omitted: image_size=224, mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]
+transforms:
+  image_size: 224
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+# Model source backend (advanced)
+# [OPTIONAL] Preferred backend: auto|torchvision|timm. Default: auto
+# When auto, attempts torchvision first, then timm when available.
+# model_source: auto

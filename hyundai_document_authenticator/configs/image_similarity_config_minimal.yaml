@@ -1,0 +1,133 @@
+# Minimal Production Configuration for TIF Document Similarity
+# Purpose: A concise, end-user-friendly config with safe defaults and clear comments.
+# Notes:
+# - Only essential, commonly tuned settings are included. All others fall back to code defaults.
+# - Paths are relative to this file’s directory unless otherwise noted.
+
+# --------------------------------------------------------------------------------------
+# INPUT MODE (how TIFs are provided to the pipeline)
+# --------------------------------------------------------------------------------------
+input_mode:
+  # Purpose: Select the ingestion mechanism.
+  # Default if omitted: "key" (uses external key-input orchestrator)
+  # Options: {tif, key}
+  # Recommendation: Use "tif" for simple folder-based runs (no external services needed).
+  doc_input_start: tif
+
+# --------------------------------------------------------------------------------------
+# FEATURE EXTRACTOR (model that turns photos into embeddings)
+# --------------------------------------------------------------------------------------
+feature_extractor:
+  # Purpose: Backbone model architecture used for feature extraction.
+  # Default if omitted: efficientnet
+  # Options: efficientnet, resnet, convnext, swin, regnet, resnet_hf, efficientnet_hf
+  model_name: efficientnet
+
+  # Purpose: Where to load the model weights from (local path or model ID).
+  # Default if omitted: none (code expects a compatible path/ID in your environment)
+  # Example choices: models/efficientnet/efficientnet_b0_weights.pth
+  pretrained_model_path_or_id: models/efficientnet/efficientnet_b0_weights.pth
+
+  # Purpose: Device selection policy for inference.
+  # Default if omitted: auto (prefer GPU if available, else CPU)
+  # Options: auto, cuda, cpu
+  device: auto
+
+# --------------------------------------------------------------------------------------
+# VECTOR DATABASE (where/ how image embeddings are searched)
+# --------------------------------------------------------------------------------------
+vector_database:
+  # Purpose: Choose the similarity search provider.
+  # Default if omitted: faiss
+  # Options: faiss (local index), qdrant (embedded/server), bruteforce (no index)
+  # Note: When privacy mode is enabled by defaults elsewhere, 'bruteforce' is disallowed.
+  provider: faiss
+
+# --------------------------------------------------------------------------------------
+# INDEXING TASK (build the searchable database from TIFs)
+# --------------------------------------------------------------------------------------
+indexing_task:
+  # Purpose: Folder where cropped images are saved and indexed; also used by fallbacks.
+  # Default if omitted: instance/database_images
+  # Typical value: keep default unless you need a different data location.
+  image_folder_to_index: instance/database_images
+
+  # Purpose: Source folder containing .tif/.tiff documents used to build the index.
+  # Default if omitted: ./data_real
+  # CLI override: --folder <path>
+  input_tif_folder_for_indexing: ./data_real
+
+  # Purpose: Number of images processed per embedding batch during indexing.
+  # Default if omitted: 32
+  # Options: positive integer (adjust for memory/performance)
+  batch_size: 32
+
+# --------------------------------------------------------------------------------------
+# SEARCH TASK (batch search of query TIFs and report generation)
+# --------------------------------------------------------------------------------------
+search_task:
+  # Purpose: Folder of .tif/.tiff query documents for similarity search.
+  # Default if omitted: ./data_real
+  # CLI override: --folder <path>
+  input_tif_folder_for_search: ./data_real
+
+  # Purpose: Nearest neighbors retrieved per cropped photo.
+  # Default if omitted: 5
+  # Options: positive integer
+  top_k: 5
+
+  # Purpose: Number of top parent documents to return per query document.
+  # Default if omitted: 7
+  # Options: positive integer
+  top_doc: 7
+
+  # Purpose: Persist run outputs (JSON summary, optional copies) to disk.
+  # Default if omitted: false (code-only/DB-only)
+  # Options: true, false
+  save_outputs_to_folder: true
+
+  # Purpose: Create a unique timestamped subfolder per run to avoid overwriting.
+  # Default if omitted: true
+  # Options: true, false
+  new_query_new_subfolder: true
+
+  # Purpose: Base folder for saved outputs when enabled.
+  # Default if omitted: instance/search_results
+  # Options: any writable path
+  output_folder_for_results: instance/search_results
+
+  # Purpose: Write a run-level JSON summary with parameters and results.
+  # Default if omitted: true
+  # Options: true, false
+  save_search_summary_json: true
+
+  # Purpose: Explicitly disable DB writes in minimal setups to avoid Postgres dependency.
+  # Options: true, false
+  save_results_to_postgresql: false
+
+# --------------------------------------------------------------------------------------
+# PHOTO EXTRACTION (how photos are cropped from relevant TIF pages)
+# --------------------------------------------------------------------------------------
+photo_extractor_config:
+  # Purpose: Choose extraction strategy.
+  # Default if omitted: bbox
+  # Options: bbox (predefined boxes), yolo (object detection model)
+  photo_extraction_mode: bbox
+
+  bbox_extraction:
+    # Purpose: Bounding box coordinate convention.
+    # Default if omitted: xyxy
+    # Options: xyxy (l,t,r,b), xywh (l,t,w,h), cxcywh (cx,cy,w,h)
+    bbox_format: xyxy
+
+    # Purpose: Whether bbox coordinates are normalized (0..1) or in pixels.
+    # Default if omitted: false
+    # Options: true, false
+    normalized: false
+
+    # Purpose: List of bounding boxes to crop from each relevant page.
+    # Default if omitted: module falls back to its internal defaults (may produce fewer/no crops).
+    # Options: list of 4-number arrays as [left, top, right, bottom] in pixels for xyxy.
+    bbox_list:
+      - [171, 236, 1480, 1100]
+      - [171, 1168, 1480, 2032]

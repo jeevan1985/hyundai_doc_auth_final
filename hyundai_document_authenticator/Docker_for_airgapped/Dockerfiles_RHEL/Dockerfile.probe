@@ -1,0 +1,190 @@
+# ==============================================================================
+#      ⭐ Universal System Probe & Dockerfile Snippet Generator (v7 - Final) ⭐
+# ==============================================================================
+#
+# --- 🎯 PURPOSE ---
+# This Dockerfile is a powerful diagnostic tool. Its job is to probe a base
+# image and generate a professional report detailing the key information AND
+# best-practice Dockerfile snippets needed to write a production-ready,
+# multi-stage Dockerfile for that system. This version is built for
+# maximum reliability and clarity.
+#
+# --- 🛠️ HOW TO USE ---
+# Build this Dockerfile, passing the base image you want to test as a
+# build argument. The output will be a detailed report and code snippets.
+# For best results, use '--progress=plain' to see the clean output.
+#
+# --- ⭐ PRIMARY EXAMPLE COMMAND ---
+# sudo docker build --progress=plain --no-cache --build-arg BASE_IMAGE=python:3.11-slim -f Dockerfile.probe .
+#
+# ==============================================================================
+
+# Use a build argument to make the base image easily configurable.
+ARG BASE_IMAGE=python:3.11-slim
+FROM ${BASE_IMAGE}
+
+# Switch to the root user to ensure we have permissions for all system checks.
+USER root
+
+# --- [Step 1/6] Print Report Header ---
+RUN \
+    echo "" && \
+    echo "✅ ============================================================" && \
+    echo "✅           Docker System Probe Report" && \
+    echo "✅ ============================================================"
+
+# --- [Step 2/6] Gather OS, User, and Package Manager Info ---
+RUN \
+    # 'set -e' ensures that the script will exit immediately if a command fails.
+    set -e && \
+    \
+    # --- Operating System Details ---
+    echo "" && echo "🗺️  OS DETAILS" && \
+    echo "------------------------------------------------------------" && \
+    if [ -f /etc/os-release ]; then cat /etc/os-release; else echo "⚠️  Could not find /etc/os-release"; fi && \
+    \
+    # --- Default User Information ---
+    echo "" && echo "👤  DEFAULT USER INFORMATION" && \
+    echo "------------------------------------------------------------" && \
+    echo "Default User (whoami): $(whoami)" && \
+    echo "Default Home Dir (\$HOME): $HOME" && \
+    \
+    # --- Package Manager Detection ---
+    echo "" && echo "📦  PACKAGE MANAGER" && \
+    echo "------------------------------------------------------------" && \
+    if command -v apt-get >/dev/null 2>&1; then echo "Detected: apt (Debian/Ubuntu)"; \
+    elif command -v dnf >/dev/null 2>&1; then echo "Detected: dnf (RHEL/Fedora/CentOS)"; \
+    elif command -v apk >/dev/null 2>&1; then echo "Detected: apk (Alpine)"; \
+    else echo "⚠️  Could not detect a common package manager."; fi
+
+# --- [Step 3/6] Install a Test Package ---
+RUN \
+    set -e && \
+    echo "" && echo "🐍  PYTHON INSTALLATION ANALYSIS" && \
+    echo "------------------------------------------------------------" && \
+    # Check for a valid python command, preferring python3.
+    if command -v python3 >/dev/null 2>&1; then PYTHON_CMD="python3"; \
+    elif command -v python >/dev/null 2>&1; then PYTHON_CMD="python"; \
+    fi && \
+    \
+    # Only proceed if a python command was found.
+    if [ -n "$PYTHON_CMD" ]; then \
+        echo "✅ Python command found: '$PYTHON_CMD'" && \
+        echo "Installing 'flask' as a test package..." && \
+        # Install the package quietly and suppress output to keep the log clean.
+        $PYTHON_CMD -m pip install flask --quiet >/dev/null 2>&1 && \
+        echo "✅ Test package installed."; \
+    else \
+        echo "⚠️  Could not find 'python3' or 'python' command. Skipping analysis."; \
+    fi
+
+# --- [Step 4/6] Discover Library and Executable Paths ---
+RUN \
+    set -e && \
+    # Find the python command again for this independent RUN step.
+    if command -v python3 >/dev/null 2>&1; then PYTHON_CMD="python3"; elif command -v python >/dev/null 2>&1; then PYTHON_CMD="python"; fi && \
+    \
+    # Only proceed if python exists.
+    if [ -n "$PYTHON_CMD" ]; then \
+        echo "" && \
+        echo "'pip show -f flask' full output:" && \
+        # Save the output to a temporary file to avoid running the command twice.
+        $PYTHON_CMD -m pip show -f flask > /tmp/pip_show.txt && \
+        # Print the raw output for user reference.
+        cat /tmp/pip_show.txt && \
+        \
+        # Extract the library path from the 'Location:' line.
+        LIBRARY_PATH=$(grep Location /tmp/pip_show.txt | cut -d ' ' -f 2) && \
+        # Extract the relative path of the executable. 'tr -d' removes whitespace.
+        EXEC_REL_PATH=$(grep 'bin/flask' /tmp/pip_show.txt | awk '{print $1}' | tr -d '[:space:]') && \
+        \
+        echo "" && \
+        echo "💡 DERIVED PATHS:" && \
+        echo "   - Library Path: $LIBRARY_PATH" && \
+        # Save the derived paths to files so the next RUN step can use them.
+        echo "$LIBRARY_PATH" > /tmp/library_path.txt && \
+        # Check if we found an executable path before trying to resolve it.
+        if [ -n "$EXEC_REL_PATH" ]; then \
+            # Use 'dirname' to get the directory part of the relative path (e.g., '../bin').
+            EXEC_DIR_REL=$(dirname "$EXEC_REL_PATH") && \
+            # Safely navigate to the library path, then the relative executable dir, and get the absolute path.
+            # This is a robust replacement for 'readlink -m'.
+            cd "$LIBRARY_PATH" && cd "$EXEC_DIR_REL" && EXECUTABLE_PATH=$(pwd) && \
+            echo "   - Executable Path: $EXECUTABLE_PATH" && \
+            echo "$EXECUTABLE_PATH" > /tmp/executable_path.txt; \
+        fi; \
+    fi
+
+# --- [Step 5/6] Print System PATH and Generate Snippets ---
+RUN \
+    set -e && \
+    echo "" && echo "📍  SYSTEM \$PATH VARIABLE" && \
+    echo "------------------------------------------------------------" && \
+    echo "$PATH" && \
+    \
+    echo "" && \
+    echo "" && \
+    echo "🛠️ ============================================================" && \
+    echo "🛠️      Generated Dockerfile Snippets (For Multi-Stage Builds)" && \
+    echo "🛠️ ============================================================" && \
+    echo "" && \
+    \
+    echo "# === Stage 1: Builder =======================================" && \
+    echo "# 1. Install System Dependencies (example: build-essential tools)" && \
+    if command -v dnf >/dev/null 2>&1; then echo "# RUN dnf install -y --nodocs gcc gcc-c++ make"; \
+    elif command -v apt-get >/dev/null 2>&1; then echo "# RUN apt-get update && apt-get install -y --no-install-recommends build-essential"; \
+    elif command -v apk >/dev/null 2>&1; then echo "# RUN apk add --no-cache build-base"; \
+    else echo "# (Could not determine package manager for system dependency snippet)"; fi && \
+    echo "" && \
+    \
+    echo "# 2. Install Python Dependencies" && \
+    echo "COPY requirements.txt ." && \
+    if command -v python3 >/dev/null 2>&1; then echo "RUN python3 -m pip install -r requirements.txt"; \
+    elif command -v python >/dev/null 2>&1; then echo "RUN python -m pip install -r requirements.txt"; \
+    else echo "# RUN python3 -m pip install -r requirements.txt"; fi && \
+    echo "" && \
+    \
+    echo "# === Stage 2: Final Image =================================" && \
+    # Check if the temp files with our paths exist before trying to generate snippets.
+    if [ -f /tmp/library_path.txt ] && [ -f /tmp/executable_path.txt ]; then \
+        # Read the paths back from the temp files.
+        LIBRARY_PATH=$(cat /tmp/library_path.txt) && \
+        EXECUTABLE_PATH=$(cat /tmp/executable_path.txt) && \
+        echo "# 3. Copy Python dependencies from the builder stage." && \
+        echo "#    - Libraries are copied to their original location." && \
+        echo "#    - Executables are copied to /usr/local/bin for guaranteed PATH access." && \
+        echo "" && \
+        echo "# Copy Python libraries." && \
+        echo "COPY --from=builder ${LIBRARY_PATH} ${LIBRARY_PATH}" && \
+        echo "" && \
+        echo "# Copy executables (like 'flask', 'gunicorn', or your 'cli') to a standard PATH." && \
+        echo "COPY --from=builder ${EXECUTABLE_PATH} /usr/local/bin"; \
+    else \
+        echo "# ⚠️ Could not generate COPY snippets because Python paths were not found."; \
+    fi
+
+# --- [Step 6/6] Print Report Footer ---
+RUN \
+    echo "" && \
+    echo "" && \
+    echo "✅ ============================================================" && \
+    echo "✅                     Report Complete" && \
+    echo "✅ ============================================================"
+
+# ==============================================================================
+#                      --- 📚 USAGE EXAMPLES (COOKBOOK) ---
+# ==============================================================================
+#
+# Use these commands directly in your terminal to probe different base images.
+# The '--progress=plain' flag is recommended for clean, readable output.
+#
+# --- Example for a Red Hat UBI 8 Python image ---
+# sudo docker build --progress=plain --no-cache --build-arg BASE_IMAGE=registry.access.redhat.com/ubi8/python-311 -f Dockerfile.probe .
+#
+# --- Example for a Debian-based Python image ---
+# sudo docker build --progress=plain --no-cache --build-arg BASE_IMAGE=python:3.12-bookworm -f Dockerfile.probe .
+#
+# --- Example for a standard Alpine Linux image ---
+# sudo docker build --progress=plain --no-cache --build-arg BASE_IMAGE=alpine:latest -f Dockerfile.probe .
+#
+# ==============================================================================

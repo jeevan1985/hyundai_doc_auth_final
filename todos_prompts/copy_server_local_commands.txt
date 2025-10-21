@@ -1,0 +1,33 @@
+# Copy directory recursively from remote server to local PC
+# -r : recursive copy for directories and their contents
+# aiuser7@192.168.1.207 : username and remote server IP address
+# /nas2/jylee/hd_card/data/labeled_images : source path on remote server
+# /data : destination path on local PC
+scp -r aiuser7@192.168.1.207:/nas2/jylee/hd_card/data/labeled_images /data
+
+
+# Copy directory recursively from local PC to remote server
+# -r : recursive copy for directories and their contents
+# /data : source path on local PC
+# aiuser7@192.168.1.207 : username and remote server IP address
+# /nas2/jylee/hd_card/data/labeled_images : destination path on remote server
+scp -r /data aiuser7@192.168.1.207:/nas2/jylee/hd_card/data/labeled_images
+
+
+##########################################################
+# Extra Info: Common useful SCP options with examples
+##########################################################
+
+# -P : Specify SSH port if server SSH runs on non-default port (default: 22)
+# Example: Copy local folder '/data' to remote server SSH on port 2222
+scp -r -P 2222 /data aiuser7@192.168.1.207:/nas2/jylee/hd_card/data/labeled_images
+
+
+# -C : Enable compression to speed up transfer of large files over slow networks
+# Example: Copy remote folder with compression enabled
+scp -r -C aiuser7@192.168.1.207:/nas2/jylee/hd_card/data/labeled_images /data
+
+
+# -p : Preserve modification times, access times, and modes from the original file
+# Example: Copy local folder to remote server keeping file permissions and timestamps
+scp -r -p /data aiuser7@192.168.1.207:/nas2/jylee/hd_card/data/labeled_images

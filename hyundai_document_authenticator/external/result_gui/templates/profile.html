@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">{{ TRANSLATIONS['profile.title'] }}</h5>
+        <form method="post">
+          <div class="mb-3">
+            <label for="current_password" class="form-label">{{ TRANSLATIONS['profile.current_password'] }}</label>
+            <input type="password" class="form-control" id="current_password" name="current_password" required>
+          </div>
+          <div class="mb-3">
+            <label for="new_password" class="form-label">{{ TRANSLATIONS['profile.new_password'] }}</label>
+            <input type="password" class="form-control" id="new_password" name="new_password" required>
+          </div>
+          <div class="mb-3">
+            <label for="confirm_password" class="form-label">{{ TRANSLATIONS['profile.confirm_password'] }}</label>
+            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+          </div>
+          <button type="submit" class="btn btn-primary">{{ TRANSLATIONS['profile.update_password'] }}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

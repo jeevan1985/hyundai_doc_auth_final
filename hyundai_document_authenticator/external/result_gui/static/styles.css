@@ -1,0 +1,128 @@
+:root {
+  --rgui-accent: #0d6efd; /* Bootstrap primary */
+  --rgui-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.05);
+  --rgui-shadow-hover: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+  --rgui-hover-bg: rgba(13, 110, 253, 0.05);
+  --rgui-border: rgba(0, 0, 0, 0.08);
+}
+
+body {
+  background-color: #f8f9fa;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark theme improvements */
+[data-bs-theme="dark"] body,
+[data-bs-theme="dark"] {
+  background-color: #0f1115; /* deep slate */
+  color: #e6e6e6;
+}
+[data-bs-theme="dark"] .form-label { color: #e0e3e7; }
+[data-bs-theme="dark"] .form-text { color: #aab0b6; }
+[data-bs-theme="dark"] .card { background-color: #151923; border-color: rgba(255,255,255,0.08); box-shadow: none; }
+[data-bs-theme="dark"] .table-responsive { background: #151923; border-color: rgba(255,255,255,0.08); }
+[data-bs-theme="dark"] .table tbody tr:hover { background-color: rgba(120, 120, 150, 0.12); }
+
+/* Section separation boxes */
+.section-box {
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 0.5rem;
+  padding: 0.75rem 0.75rem 0.25rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+[data-bs-theme="dark"] .section-box { background: #151923; border-color: rgba(255,255,255,0.08); }
+/* Ensure theme-specific dark panels for non-BS themes */
+[data-theme="retro"] .section-box { background: var(--card); border-color: var(--card-border); color: var(--fg); }
+[data-theme="cyberpunk"] .section-box { background: var(--card); border-color: var(--card-border); color: var(--fg); }
+
+/* Retro Futurism theme */
+[data-bs-theme="retro"] { --rgui-accent: #ff6ec7; background-color: #1a0f1f; color: #f6e7ff; }
+[data-bs-theme="retro"] .card, [data-bs-theme="retro"] .table-responsive { background: rgba(26,15,31,0.9); border-color: rgba(255,255,255,0.12); }
+[data-bs-theme="retro"] .btn-primary { background-color: #ff6ec7; border-color: #ff6ec7; }
+[data-bs-theme="retro"] .form-control:focus, [data-bs-theme="retro"] .form-select:focus { box-shadow: 0 0 0 0.2rem rgba(255, 110, 199, 0.25); }
+
+/* Cyberpunk theme */
+[data-bs-theme="cyberpunk"] { --rgui-accent: #00f0ff; background-color: #0b0b17; color: #e3f8ff; }
+[data-bs-theme="cyberpunk"] .card, [data-bs-theme="cyberpunk"] .table-responsive { background: rgba(11,11,23,0.92); border-color: rgba(0, 240, 255, 0.18); }
+[data-bs-theme="cyberpunk"] .btn-primary { background-color: #ff00a8; border-color: #ff00a8; }
+[data-bs-theme="cyberpunk"] .form-control:focus, [data-bs-theme="cyberpunk"] .form-select:focus { box-shadow: 0 0 0 0.2rem rgba(0, 240, 255, 0.25); }
+
+/* Glassmorphism theme */
+[data-bs-theme="glass"] { --rgui-accent: #6ea8fe; background: linear-gradient(135deg, rgba(238,244,255,1) 0%, rgba(220,230,255,1) 100%); color: #263238; }
+[data-bs-theme="glass"] .card, [data-bs-theme="glass"] .table-responsive { background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.35); }
+[data-bs-theme="glass"] .form-control:focus, [data-bs-theme="glass"] .form-select:focus { box-shadow: 0 0 0 0.2rem rgba(110, 168, 254, 0.25); }
+
+/* Apply system dark only when no custom theme is present */
+@media (prefers-color-scheme: dark) {
+  body:not([data-bs-theme]):not([data-theme]),
+  body[data-bs-theme=""]:not([data-theme]) { background-color: #0f1115; color: #e6e6e6; }
+}
+
+/* Tighter theme dropdown to avoid crowding username */
+.navbar .form-select.form-select-sm { min-width: 110px; }
+
+/* Override for theme and language selectors to ensure narrower width and spacing */
+.navbar-actions .theme-select, .navbar-actions .language-select {
+  max-width: 170px; width: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-left: 4px;
+}
+
+/* Ensure labels have strong contrast in dark mode */
+[data-bs-theme="dark"] label, [data-bs-theme="dark"] .form-label { color: #e4e7eb; }
+
+/* Cards: subtle rounding and elevation */
+.card {
+  border-radius: 0.5rem;
+  border: 1px solid var(--rgui-border);
+  box-shadow: var(--rgui-shadow);
+}
+.card:hover {
+  box-shadow: var(--rgui-shadow-hover);
+  transition: box-shadow 0.2s ease-in-out;
+}
+
+/* Tables: compact font, nowrap cells, soft hover */
+.table { font-size: 0.9rem; }
+.table td, .table th { white-space: nowrap; }
+.table tbody tr { transition: background-color 0.15s ease-in-out; }
+.table tbody tr:hover { background-color: var(--rgui-hover-bg); }
+
+/* Responsive container around tables */
+.table-responsive {
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 0.5rem;
+  padding: 0.25rem;
+}
+
+/* Form controls: consistent focus rings */
+.form-control, .form-select {
+  border-radius: 0.375rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.form-control:focus, .form-select:focus {
+  border-color: var(--rgui-accent);
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+}
+
+/* Multi-select sizing for better usability */
+select[multiple] {
+  min-height: 9rem;
+}
+
+/* Buttons: subtle interaction feedback */
+.btn {
+  transition: transform 0.05s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+.btn:hover { box-shadow: var(--rgui-shadow); }
+.btn:active { transform: translateY(1px); }
+
+/* Pagination cosmetics */
+.pagination .page-link { border-radius: 0.375rem; }
+
+/* Helper text */
+.form-text { color: #6c757d; }
+
+/* Tooltip affordance */
+[data-bs-toggle="tooltip"] { cursor: help; }

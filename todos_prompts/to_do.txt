@@ -1,0 +1,120 @@
+
+Use this prompt as-is to instruct an agent to generate minimal end-user configs for all remaining external modules.
+
+Task
+Create minimal, end-user-friendly configuration files for every configuration YAML in D:\frm_git\hyundai_document_authenticator\hyundai_document_authenticator\external and all nested module directories. Do not modify any originals. For each original file, generate a new minimal file named with the _minimal suffix inserted before the file extension (e.g., foo.yaml -> foo_minimal.yaml).
+
+Scope and Targets
+- Root to scan: D:\frm_git\hyundai_document_authenticator\hyundai_document_authenticator\external
+- Include files:
+  - **/*.yaml
+  - **/*.yml
+  - Additionally check each module’s docs or README for referenced config file paths and include those if present.
+- Do not modify or delete any existing files.
+
+Naming Convention
+- For each original config: <original_name>_minimal.yaml in the same directory as the original.
+- Do not overwrite the original.
+- Preserve the original file’s extension (.yaml vs .yml).
+
+Minimalization Rules
+- Keep only parameters essential to successful deployment and commonly tuned by end users:
+  - Input/output paths
+  - Provider selection and core feature toggles
+  - Device selection (auto/cuda/cpu)
+  - Basic batch sizes/concurrency where required for performance/memory
+  - Credentials as environment variable references (never embed secrets)
+  - Logging on/off toggle and one simple target path if strictly necessary
+- Remove advanced, developer-only, rarely changed, or fine-tuning parameters. When in doubt: omit and rely on code defaults.
+- For every parameter you include, add a short plain-language comment that states:
+  - Purpose of the parameter
+  - Hardcoded default if omitted (what the code falls back to)
+  - Allowed options or typical value ranges
+- Defaults and safety posture:
+  - Prefer safe, privacy-first defaults (e.g., privacy_mode: true where applicable)
+  - Disable DB writes by default unless the module requires DB to function (e.g., save_results_to_postgresql: false)
+  - Avoid destructive actions by default (e.g., force_recreate=false, force_rebuild=false)
+  - Prefer local/embedded providers (e.g., faiss, embedded SQLite) where applicable
+  - Use environment variables for credentials (e.g., ${POSTGRES_USER}, ${API_KEY}) and reference .env.example
+
+Content and Structure Guidelines
+- Keep files concise and logically grouped. Use YAML best practices.
+- Place a brief header comment explaining:
+  - Purpose
+  - How paths are resolved (relative to file)
+  - One-paragraph quick-start: which 2–3 values a user most likely needs to change
+- For each module, cover only the minimal subset needed to run the typical workflow of that module. Examples of typical essentials:
+  - image_authenticity_classifier: on/off toggle; path to classifier config; class names; device selection
+  - key_input: input mode; API endpoint or staging directory; auth token via ${ENV}; batch size/limits if required
+  - photo_extractor: extraction mode (bbox/yolo); model path if yolo; bbox list if bbox; device selection; basic thresholds
+  - tif_searcher: OCR backend; language; minimal paddles settings; search text; device toggle; privacy toggle if any
+  - result_gui: port; host binding; minimal auth toggle; static root; DB/file storage switches
+- Parameter comments must be clear and accurate. If a default is dynamic or “depends on X,” say so explicitly.
+
+Functional Requirements
+- Each minimal config must be immediately usable for a standard deployment scenario with no further changes beyond obvious local path adjustments.
+- Use safe defaults that do not require network access unless the module fundamentally needs it.
+- Where credentials or sensitive settings are required, reference environment variables and never include actual secrets.
+
+Process
+1) Discover configs: recursively list all *.yaml and *.yml in external/. Also scan module docs for config names referenced.
+2) For each config:
+   - Open and review the file and related code to infer default behavior and required keys.
+   - Create the new _minimal file with concise sections and minimal keys.
+   - Annotate every kept parameter with comments: purpose, fallback default, allowed values.
+   - Use relative paths (relative to the config file location) where possible.
+3) Validate:
+   - Ensure each YAML is syntactically valid and loads (no tabs, consistent indentation).
+   - No original files are overwritten.
+4) Report:
+   - Provide a Change Report (see below) summarizing the created minimal files, and list any files for which a minimal version could not be generated, with reasons.
+
+Safety and Defaults Policy
+- Disable any data-destroying options by default.
+- Disable network or DB writes by default unless mandatory to function.
+- Avoid enabling privacy-sensitive outputs by default; document how to enable.
+- Log minimally by default; no noisy debug logs.
+
+Execution Environment Awareness
+- OS: Windows/Linux
+- If running any scripts for discovery or validation:
+  - Create a temporary .py file and execute with python (not inline -c).
+  - Ensure cross-platform considerations are documented if any script is retained.
+
+Deliverables
+- One minimal YAML per discovered config, saved as <original>_minimal.yaml alongside the original.
+- Each minimal file includes:
+  - Header comment (purpose; path resolution; quick-start)
+  - Only essential keys with comments for purpose, fallback default, allowed values
+  - Safe defaults that work out-of-the-box for a typical local deployment
+
+Response Behavior Rules
+- Do not paste full YAMLs in chat if you can write files directly.
+- Provide a final Change Report.
+
+Change Report Format
+- Status: “All requested changes applied” or “Some changes could not be applied”
+- Details: List of files created with paths
+- Missing / Not Possible: Which files could not be handled and why
+- (Optional) Additional Recommendations: Short list of improvements or risks noted
+
+Acceptance Criteria
+- All discovered configs in external/ have corresponding _minimal files next to them.
+- Minimal files are concise, valid YAML, and reflect safe, production-friendly defaults.
+- No original files are modified.
+- Every included parameter has clear comments including purpose, fallback default, and options.
+
+Additional Recommendations for the Agent to Include
+- Create/update a consolidated .env.example to include any newly referenced variables across modules (API keys, DB creds, endpoints).
+- Propose a lightweight schema validation approach (e.g., pydantic or jsonschema) to enforce compatible combinations (e.g., bruteforce disabled when privacy is true).
+- Standardize provider defaults across modules (e.g., device=auto, logging minimal).
+- Identify duplicate or inconsistent defaults across configs and suggest harmonization.
+- Provide a minimal “quick start” in each module’s README pointing to the new *_minimal.yaml file and the 2–3 values a user should set (paths, model weights, endpoint).
+- If a module strongly depends on another module’s config, note it at the top of the minimal file under “Dependencies” and link the path.
+
+My Persona and Code Standards (apply if you create any helper code/scripts)
+- Persona: Senior Principal Software Engineer and Code Quality Architect.
+- Docstrings: Google-style, PEP 257 compliant.
+- Type Hints: Full typing for functions and variables.
+- Professionalism & Readability: PEP 8, idiomatic constructs.
+- Commenting: Only explain non-obvious logic and the “why,” not the “what.”

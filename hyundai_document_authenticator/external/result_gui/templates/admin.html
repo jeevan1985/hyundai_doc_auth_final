@@ -1,0 +1,375 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle text-muted">{{ TRANSLATIONS['admin.total_users'] }}</h6>
+          <div class="display-6 fw-bold">{{ metrics.total_users }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle text-muted">{{ TRANSLATIONS['admin.signups_7d'] }}</h6>
+          <div class="display-6 fw-bold">{{ metrics.signups_week }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-md-4">
+      <div class="card shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="card-subtitle text-muted">{{ TRANSLATIONS['admin.total_active_sessions'] if 'admin.total_active_sessions' in TRANSLATIONS else 'Total Active Sessions' }}</h6>
+          <div class="display-6 fw-bold">{{ metrics.total_active_sessions if metrics.total_active_sessions is defined else metrics.active_sessions_12h }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h5 class="mb-0">{{ TRANSLATIONS['admin.recent_activity'] }}</h5>
+    <div class="d-flex align-items-center gap-2">
+      <form class="d-flex align-items-center" method="post" action="{{ url_for('main.clear_activity') }}" onsubmit="return (function(e){
+          var I18N = (window.I18N && window.I18N.dict) || {};
+          return confirm(I18N['admin.clear_confirm'] || 'Delete selected activity logs?');
+        })();" aria-label="{{ TRANSLATIONS['admin.clear_activity'] }}">
+        <label class="visually-hidden" for="range_choice">{{ TRANSLATIONS['admin.clear_activity'] }}</label>
+        <select id="range_choice" name="range_choice" class="form-select form-select-sm me-2" aria-label="{{ TRANSLATIONS['admin.clear_activity'] }}">
+          <option value="all">{{ TRANSLATIONS['admin.clear_all'] }}</option>
+          <option value="today">{{ TRANSLATIONS['admin.clear_today'] }}</option>
+          {% for n in range(1, 32) %}
+            <option value="days_{{ n }}">{{ TRANSLATIONS['admin.clear_past_days'].format(days=n) }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-sm btn-outline-danger" data-bs-toggle="tooltip" title="{{ TRANSLATIONS['admin.clear_activity'] }}" aria-label="{{ TRANSLATIONS['admin.clear'] }}">
+          <i class="bi bi-trash3 me-1" aria-hidden="true"></i>{{ TRANSLATIONS['admin.clear'] }}
+        </button>
+      </form>
+      <a class="btn btn-sm btn-primary" href="{{ url_for('main.users_index') }}" data-bs-toggle="tooltip" title="{{ TRANSLATIONS['admin.add_user'] }}"><i class="bi bi-person-plus me-1"></i>{{ TRANSLATIONS['admin.add_user'] }}</a>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.system_health_csv') }}" download data-bs-toggle="tooltip" title="{{ TRANSLATIONS['admin.export_system_health_csv'] }}"><i class="bi bi-download me-1"></i>{{ TRANSLATIONS['admin.export_system_health_csv'] }}</a>
+      <a class="btn btn-sm btn-outline-success" href="#system-health" data-bs-toggle="tooltip" title="{{ TRANSLATIONS['admin.system_health'] }}"><i class="bi bi-heart-pulse me-1"></i>{{ TRANSLATIONS['admin.system_health'] }}</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <form class="row g-2 align-items-end" method="get" action="{{ url_for('main.admin') }}">
+        <div class="col-12 col-md-5">
+          <label class="form-label mb-0 small" for="uf_col">{{ TRANSLATIONS['admin.unified_filter'] if 'admin.unified_filter' in TRANSLATIONS else 'Filter' }}</label>
+          <div class="input-group input-group-sm">
+            <select class="form-select form-select-sm" id="uf_col" aria-label="Filter column">
+              <option value="username">{{ TRANSLATIONS['common.username'] }}</option>
+              <option value="action">{{ TRANSLATIONS['common.action'] }}</option>
+              <option value="ip">{{ TRANSLATIONS['common.ip'] }}</option>
+              <option value="timestamp">{{ TRANSLATIONS['common.timestamp'] }}</option>
+              <option value="user_agent">{{ TRANSLATIONS['common.user_agent'] }}</option>
+              <option value="user_id">{{ TRANSLATIONS['common.user_id'] if 'common.user_id' in TRANSLATIONS else 'User ID' }}</option>
+              <option value="entry">{{ TRANSLATIONS['admin.entry_number'] if 'admin.entry_number' in TRANSLATIONS else 'Entry' }}</option>
+              <option value="status">{{ TRANSLATIONS['admin.current_status'] if 'admin.current_status' in TRANSLATIONS else 'Current Status' }}</option>
+            </select>
+            <input type="text" class="form-control form-control-sm" id="uf_val" placeholder="Enter username" />
+            <button type="button" class="btn btn-outline-secondary" id="uf_clear">{{ TRANSLATIONS['common.clear'] if 'common.clear' in TRANSLATIONS else 'Clear' }}</button>
+          </div>
+        </div>
+        <div class="col-12">
+          <label class="form-label mb-0 small text-muted">{{ TRANSLATIONS['admin.additional_filters'] if 'admin.additional_filters' in TRANSLATIONS else 'Additional filters' }}</label>
+        </div>
+        <div class="col-12 col-md-2">
+          <label class="form-label mb-0 small" for="f_username">{{ TRANSLATIONS['common.username'] }}</label>
+          <input type="text" class="form-control form-control-sm" id="f_username" name="f_username" value="{{ f_username or '' }}" placeholder="e.g., alice" />
+        </div>
+        <div class="col-12 col-md-2">
+          <label class="form-label mb-0 small" for="f_action">{{ TRANSLATIONS['common.action'] }}</label>
+          <select class="form-select form-select-sm" id="f_action" name="f_action">
+            <option value="">{{ TRANSLATIONS['common.any'] if 'common.any' in TRANSLATIONS else 'Any' }}</option>
+            <option value="login" {% if f_action=='login' %}selected{% endif %}>login</option>
+            <option value="logout" {% if f_action=='logout' %}selected{% endif %}>logout</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-2">
+          <label class="form-label mb-0 small" for="f_ip">{{ TRANSLATIONS['common.ip'] }}</label>
+          <input type="text" class="form-control form-control-sm" id="f_ip" name="f_ip" value="{{ f_ip or '' }}" placeholder="e.g., 10.0.0.1" />
+        </div>
+        <div class="col-12 col-md-3">
+          <label class="form-label mb-0 small" for="f_ts">{{ TRANSLATIONS['common.timestamp'] }}</label>
+          <input type="text" class="form-control form-control-sm" id="f_ts" name="f_ts" value="{{ f_ts or '' }}" placeholder="YYYY-MM-DD or YYYY-MM-DD HH:MM:SS" />
+        </div>
+        <input type="hidden" id="f_user_agent" name="f_user_agent" value="{{ f_user_agent or '' }}" />
+        <input type="hidden" id="f_user_id" name="f_user_id" value="{{ f_user_id or '' }}" />
+        <input type="hidden" id="f_entry" name="f_entry" value="{{ f_entry or '' }}" />
+        <input type="hidden" id="f_status" name="f_status" value="{{ f_status or '' }}" />
+        <div class="col-12 col-md-1">
+          <label class="form-label mb-0 small" for="activity-sort">{{ TRANSLATIONS['admin.sort_by'] if 'admin.sort_by' in TRANSLATIONS else 'Sort by' }}</label>
+          <select id="activity-sort" name="sort_by" class="form-select form-select-sm" aria-label="{{ TRANSLATIONS['admin.sort_by'] if 'admin.sort_by' in TRANSLATIONS else 'Sort by' }}">
+            <option value="entry" {% if sort_by=='entry' %}selected{% endif %}>{{ TRANSLATIONS['admin.entry_number'] if 'admin.entry_number' in TRANSLATIONS else 'Entry' }}</option>
+            <option value="username" {% if sort_by=='username' %}selected{% endif %}>{{ TRANSLATIONS['common.username'] }}</option>
+            <option value="timestamp" {% if sort_by=='timestamp' %}selected{% endif %}>{{ TRANSLATIONS['common.timestamp'] }}</option>
+            <option value="ip" {% if sort_by=='ip' %}selected{% endif %}>{{ TRANSLATIONS['common.ip'] }}</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-1">
+          <label class="form-label mb-0 small" for="sort_dir">{{ TRANSLATIONS['common.direction'] if 'common.direction' in TRANSLATIONS else 'Direction' }}</label>
+          <select name="sort_dir" id="sort_dir" class="form-select form-select-sm" aria-label="Sort direction">
+            <option value="asc" {% if sort_dir=='asc' %}selected{% endif %}>{{ TRANSLATIONS['common.asc'] if 'common.asc' in TRANSLATIONS else 'Asc' }}</option>
+            <option value="desc" {% if sort_dir=='desc' %}selected{% endif %}>{{ TRANSLATIONS['common.desc'] if 'common.desc' in TRANSLATIONS else 'Desc' }}</option>
+          </select>
+        </div>
+        <div class="col-12 col-md-1 d-flex gap-2">
+          <input type="hidden" name="page" value="{{ pagination.page }}" />
+          <input type="hidden" name="per_page" value="{{ pagination.per_page }}" />
+          <button type="submit" class="btn btn-sm btn-outline-primary w-100">{{ TRANSLATIONS['common.apply'] if 'common.apply' in TRANSLATIONS else 'Apply' }}</button>
+        </div>
+      </form>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-striped table-hover mb-0" id="resultsTable" data-export-filename="recent_activity" data-enable-controls="true">
+        <thead class="table-light">
+          <tr>
+            <th>{{ TRANSLATIONS['common.entry_number'] }}</th>
+            <th>{{ TRANSLATIONS['common.user_id'] if 'common.user_id' in TRANSLATIONS else 'User ID' }}</th>
+            <th>{{ TRANSLATIONS['common.username'] }}</th>
+            <th>{{ TRANSLATIONS['common.action'] }}</th>
+            <th>{{ TRANSLATIONS['common.ip'] }}</th>
+            <th>{{ TRANSLATIONS['common.user_agent'] }}</th>
+            <th>{{ TRANSLATIONS['admin.current_status'] if 'admin.current_status' in TRANSLATIONS else 'Current Status' }}</th>
+            <th>{{ TRANSLATIONS['common.timestamp'] }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if activity %}
+            {% for a in activity %}
+              <tr>
+                <td>{{ a.id }}</td>
+                <td>{{ a.user_id or '-' }}</td>
+                <td>{{ a.username }}</td>
+                <td><span class="badge {% if a.action=='login' %}bg-success{% else %}bg-secondary{% endif %}">{{ a.action }}</span></td>
+                <td>{{ a.ip or '-' }}</td>
+                <td class="text-truncate" style="max-width: 280px;" title="{{ a.user_agent }}">{{ a.user_agent or '-' }}</td>
+                {% set is_online = (a.username in online_users) %}
+                <td>
+                  <span class="badge {{ 'bg-primary' if is_online else 'bg-danger' }}">{{ TRANSLATIONS['common.online'] if is_online else TRANSLATIONS['common.offline'] }}</span>
+                </td>
+                <td>{{ a.created_at }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr><td colspan="7" class="text-center text-muted">{{ TRANSLATIONS['admin.no_activity'] }}</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <div class="card-footer">
+      <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center mb-0">
+          <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
+            <a class="page-link" href="?page={{ pagination.prev_page }}&per_page={{ pagination.per_page }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&f_username={{ f_username }}&f_action={{ f_action }}&f_ip={{ f_ip }}&f_ts={{ f_ts }}&f_user_agent={{ f_user_agent }}&f_user_id={{ f_user_id }}&f_entry={{ f_entry }}">{{ TRANSLATIONS['index.previous'] }}</a>
+          </li>
+          <li class="page-item disabled"><a class="page-link" href="#">{{ TRANSLATIONS['common.page'] }} {{ pagination.page }} {{ TRANSLATIONS['common.of'] }} {{ pagination.total_pages }}</a></li>
+          <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
+            <a class="page-link" href="?page={{ pagination.next_page }}&per_page={{ pagination.per_page }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}&f_username={{ f_username }}&f_action={{ f_action }}&f_ip={{ f_ip }}&f_ts={{ f_ts }}&f_user_agent={{ f_user_agent }}&f_user_id={{ f_user_id }}&f_entry={{ f_entry }}">{{ TRANSLATIONS['index.next'] }}</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </div>
+
+  <!-- Client-side sorting script removed in favor of robust server-side sorting. -->
+
+  <div class="card mt-4" id="system-health">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">{{ TRANSLATIONS['admin.system_health'] }}</h5>
+      <div>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('main.system_health_csv') }}" download>{{ TRANSLATIONS['admin.export_csv'] }}</a>
+        <button class="btn btn-sm btn-outline-primary" type="button" id="btn-refresh-health">{{ TRANSLATIONS['admin.refresh'] }}</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div id="health-alert" class="alert alert-warning d-none" role="alert">{{ TRANSLATIONS['admin.unable_fetch_metrics'] }}</div>
+      <div class="row g-3">
+        <div class="col-12 col-md-6">
+          <div class="border rounded p-2 h-100">
+            <h6 class="text-muted">{{ TRANSLATIONS['admin.server'] }}</h6>
+            <dl class="row mb-0">
+              <dt class="col-6">{{ TRANSLATIONS['common.hostname'] }}</dt><dd class="col-6" id="sv-host">-</dd>
+              <dt class="col-6">{{ TRANSLATIONS['common.platform'] }}</dt><dd class="col-6" id="sv-platform">-</dd>
+              <dt class="col-6">{{ TRANSLATIONS['common.uptime_s'] }}</dt><dd class="col-6" id="sv-uptime">-</dd>
+              <dt class="col-6">{{ TRANSLATIONS['common.load'] }}</dt><dd class="col-6" id="sv-load">-</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <div class="border rounded p-2 h-100">
+            <h6 class="text-muted">{{ TRANSLATIONS['admin.database'] }}</h6>
+            <dl class="row mb-0">
+              <dt class="col-6">{{ TRANSLATIONS['common.connected'] }}</dt><dd class="col-6" id="db-ok">-</dd>
+              <dt class="col-6">{{ TRANSLATIONS['common.error'] }}</dt><dd class="col-6" id="db-err">-</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <div class="border rounded p-2 h-100">
+            <h6 class="text-muted">{{ TRANSLATIONS['admin.queue'] }}</h6>
+            <dl class="row mb-0">
+              <dt class="col-6">{{ TRANSLATIONS['common.status'] }}</dt><dd class="col-6" id="q-status">-</dd>
+              <dt class="col-6">{{ TRANSLATIONS['common.backlog'] }}</dt><dd class="col-6" id="q-backlog">-</dd>
+            </dl>
+          </div>
+        </div>
+        <div class="col-12 col-md-6">
+          <div class="border rounded p-2 h-100">
+            <h6 class="text-muted">{{ TRANSLATIONS['admin.storage'] }}</h6>
+            <dl class="row mb-0">
+              <dt class="col-6">{{ TRANSLATIONS['common.total'] }}</dt><dd class="col-6" id="st-total">-</dd>
+              <dt class="col-6">{{ TRANSLATIONS['common.used'] }}</dt><dd class="col-6" id="st-used">-</dd>
+              <dt class="col-6">{{ TRANSLATIONS['common.free'] }}</dt><dd class="col-6" id="st-free">-</dd>
+            </dl>
+          </div>
+        </div>
+      </div>
+      <div class="text-muted small mt-2">{{ TRANSLATIONS['common.last_updated'] }} <span id="health-ts">-</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const healthUrl = '{{ url_for('main.system_health_json') }}';
+  const alertEl = document.getElementById('health-alert');
+  function bytesToHuman(n){
+    const units = ['B','KB','MB','GB','TB'];
+    let i=0, v = Number(n||0);
+    while(v >= 1024 && i < units.length-1){ v/=1024; i++; }
+    return (v? v.toFixed(1): '0') + ' ' + units[i];
+  }
+  function render(m){
+    // Hide alert
+    alertEl.classList.add('d-none');
+    document.getElementById('sv-host').textContent = m.server.hostname || '-';
+    document.getElementById('sv-platform').textContent = m.server.platform || '-';
+    document.getElementById('sv-uptime').textContent = String(m.server.uptime_seconds || 0);
+    const l1 = (m.server.load_1m ?? '-');
+    const l5 = (m.server.load_5m ?? '-');
+    const l15 = (m.server.load_15m ?? '-');
+    document.getElementById('sv-load').textContent = `${l1} / ${l5} / ${l15}`;
+
+    const I18N = (window.I18N && window.I18N.dict) || {};
+    document.getElementById('db-ok').textContent = m.database.connected ? (I18N['common.yes'] || 'Yes') : (I18N['common.no'] || 'No');
+    document.getElementById('db-err').textContent = m.database.error || '-';
+
+    document.getElementById('q-status').textContent = m.queue.status || '-';
+    document.getElementById('q-backlog').textContent = String(m.queue.backlog || 0);
+
+    document.getElementById('st-total').textContent = bytesToHuman(m.storage.disk_total_bytes || 0);
+    document.getElementById('st-used').textContent = bytesToHuman(m.storage.disk_used_bytes || 0);
+    document.getElementById('st-free').textContent = bytesToHuman(m.storage.disk_free_bytes || 0);
+
+    const ts = m.generated_at ? new Date(m.generated_at*1000) : new Date();
+    document.getElementById('health-ts').textContent = ts.toLocaleString();
+  }
+  async function fetchHealth(){
+    try{
+      const resp = await fetch(healthUrl, { headers: { 'Accept': 'application/json' } });
+      if(!resp.ok){ throw new Error('HTTP '+resp.status); }
+      const data = await resp.json();
+      render(data);
+    } catch(err){
+      const I18N = (window.I18N && window.I18N.dict) || {};
+      alertEl.textContent = I18N['admin.unable_fetch_metrics'] || 'Unable to fetch system metrics.';
+      alertEl.classList.remove('d-none');
+    }
+  }
+  document.getElementById('btn-refresh-health').addEventListener('click', fetchHealth);
+  // Auto-refresh every 15 seconds
+  setInterval(fetchHealth, 15000);
+  // Initial fetch
+  fetchHealth();
+})();
+</script>
+<script>
+// Unified Admin filter control -> maps to existing backend fields (f_username, f_action, f_ip, f_ts)
+(function(){
+  const form = document.querySelector('.card-header form');
+  if (!form) return;
+  const sel = document.getElementById('uf_col');
+  const inp = document.getElementById('uf_val');
+  const btnClear = document.getElementById('uf_clear');
+  const fUsername = document.getElementById('f_username');
+  const fAction = document.getElementById('f_action');
+  const fIp = document.getElementById('f_ip');
+  const fTs = document.getElementById('f_ts');
+  const fUA = document.getElementById('f_user_agent');
+  const fUID = document.getElementById('f_user_id');
+  const fEntry = document.getElementById('f_entry');
+  const fStatus = document.getElementById('f_status');
+
+  function setPlaceholder(){
+    const I18N = (window.I18N && window.I18N.dict) || {};
+    const v = sel ? sel.value : 'username';
+    let ph = '';
+    if (v === 'username') ph = I18N['admin.placeholder.username'] || 'Enter username';
+    else if (v === 'action') ph = I18N['admin.placeholder.action'] || "Enter 'login' or 'logout'";
+    else if (v === 'ip') ph = I18N['admin.placeholder.ip'] || 'Enter IP address';
+    else if (v === 'timestamp') ph = I18N['admin.placeholder.timestamp'] || 'YYYY-MM-DD or YYYY-MM-DD HH:MM:SS';
+    else if (v === 'user_agent') ph = I18N['admin.placeholder.user_agent'] || 'Enter user agent substring';
+    else if (v === 'user_id') ph = I18N['admin.placeholder.user_id'] || 'Enter user id (numeric)';
+    else if (v === 'entry') ph = I18N['admin.placeholder.entry'] || 'Enter entry id (numeric)';
+    else if (v === 'status') ph = I18N['admin.placeholder.status'] || 'online or offline';
+    if (inp) inp.setAttribute('placeholder', ph);
+  }
+
+  function clearBackendFields(){
+    if (fUsername) fUsername.value = '';
+    if (fAction) fAction.value = '';
+    if (fIp) fIp.value = '';
+    if (fTs) fTs.value = '';
+    if (fUA) fUA.value = '';
+    if (fUID) fUID.value = '';
+    if (fEntry) fEntry.value = '';
+    if (fStatus) fStatus.value = '';
+  }
+
+  function applyUnifiedToBackend(){
+    if (!sel || !inp) return;
+    const col = sel.value;
+    const val = inp.value || '';
+    if (col === 'username' && fUsername) fUsername.value = val;
+    else if (col === 'action' && fAction) fAction.value = val;
+    else if (col === 'ip' && fIp) fIp.value = val;
+    else if (col === 'timestamp' && fTs) fTs.value = val;
+    else if (col === 'user_agent' && fUA) fUA.value = val;
+    else if (col === 'user_id' && fUID) fUID.value = val;
+    else if (col === 'entry' && fEntry) fEntry.value = val;
+    else if (col === 'status' && fStatus) fStatus.value = val;
+  }
+
+  // Prefill unified control from existing backend field values (first non-empty wins)
+  (function hydrate(){
+    const uv = (fUsername && fUsername.value) ? fUsername.value : '';
+    const av = (fAction && fAction.value) ? fAction.value : '';
+    const iv = (fIp && fIp.value) ? fIp.value : '';
+    const tv = (fTs && fTs.value) ? fTs.value : '';
+    const uav = (fUA && fUA.value) ? fUA.value : '';
+    const uidv = (fUID && fUID.value) ? fUID.value : '';
+    const ev = (fEntry && fEntry.value) ? fEntry.value : '';
+    const sv = (fStatus && fStatus.value) ? fStatus.value : '';
+    if (uv) { sel.value = 'username'; inp.value = uv; }
+    else if (av) { sel.value = 'action'; inp.value = av; }
+    else if (iv) { sel.value = 'ip'; inp.value = iv; }
+    else if (tv) { sel.value = 'timestamp'; inp.value = tv; }
+    else if (uav) { sel.value = 'user_agent'; inp.value = uav; }
+    else if (uidv) { sel.value = 'user_id'; inp.value = uidv; }
+    else if (ev) { sel.value = 'entry'; inp.value = ev; }
+    else if (sv) { sel.value = 'status'; inp.value = sv; }
+    setPlaceholder();
+  })();
+
+  if (sel) sel.addEventListener('change', setPlaceholder);
+  if (btnClear) btnClear.addEventListener('click', function(){ inp.value=''; });
+
+  // On submit, map unified control to backend fields
+  form.addEventListener('submit', function(){ applyUnifiedToBackend(); });
+})();
+</script>
+{% endblock %}

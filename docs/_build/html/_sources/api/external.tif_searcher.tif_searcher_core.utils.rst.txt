@@ -1,0 +1,7 @@
+external.tif\_searcher.tif\_searcher\_core.utils module
+=======================================================
+
+.. automodule:: external.tif_searcher.tif_searcher_core.utils
+   :members:
+   :undoc-members:
+   :show-inheritance:

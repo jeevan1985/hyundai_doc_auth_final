@@ -1,0 +1,155 @@
+# ==============================================================================
+#            Development Dockerfile (Debian + Conda Multi-stage)
+# ==============================================================================
+# This Dockerfile builds a development-ready image. It uses Conda to install
+# all dependencies and is configured for live-reloading via bind mounts.
+
+# ==============================================================================
+# --- Stage 1: The "Builder" Stage                                           ---
+# ==============================================================================
+# Purpose: This initial stage is a temporary build environment. Its sole
+# responsibility is to install all necessary software dependencies (Python, C
+# libraries, etc.) into a self-contained environment using the `environment.yml`
+# file. We use a standard Miniconda image as a starting point.
+# ------------------------------------------------------------------------------
+FROM continuumio/miniconda3:latest AS builder
+
+
+# Set the working directory within the builder stage. This is a temporary
+# location to store files needed for the build process.
+WORKDIR /app
+
+# --- Update Conda (Best Practice) ---
+# Before installing anything else, it's a best practice to update the conda
+# package manager itself. This ensures we have the latest bug fixes and features
+# for the package manager, leading to a more stable and reliable build process.
+#   - `conda update`: The command to update packages.
+#   - `-n base`: Specifies that we are updating a package in the 'base' conda environment.
+#   - `-c conda-forge`: Specifies the 'conda-forge' channel, which is a community-led
+#     collection of recipes and packages that is often more up-to-date than the
+#     default channel.
+#   - `conda`: The name of the package we are updating.
+#   - `-y`: Automatically answers "yes" to any prompts, making it suitable for automation.
+RUN conda update -n base -c conda-forge conda -y
+
+# --- Leverage Docker Layer Caching ---
+# Copy ONLY the environment definition file into the build context. By copying
+# this file separately, we leverage Docker's layer caching mechanism. The next,
+# very time-consuming `conda env create` step will only be re-executed if the
+# contents of `environment.yml` have changed. If the file is unchanged, Docker
+# will use the cached layer, making subsequent builds much faster.
+COPY environment.dev.yml .
+
+# --- Create the Environment with conda ---
+# This is the core step of the builder stage. We use conda to create the application's
+# dedicated environment from the specification in `environment.yml`.
+#   - `conda env create`: conda's direct, faster equivalent of `conda env create`.
+#   - `-f environment.yml`: Specifies the file that contains the list of
+#     dependencies, channels, and the environment name.
+# conda will create this new environment in a separate directory inside the container,
+# typically at `/opt/conda/envs/your-env-name`.
+RUN conda env create -f environment.dev.yml 
+
+# --- Optional Cleanup to Reduce Image Size ---
+# After the environment is created, we can clean up caches and temporary files to
+# reduce the size of the environment directory.
+#   - `conda clean`: The command to remove unused files.
+#   - `-a`: Removes all unused packages and caches (index cache, lock files, tarballs).
+#   - `-f`: Force removal of specified directories.
+#   - `-y`: Automatically answers "yes" to prompts.
+# This makes the environment we copy to the final stage as lean as possible.
+RUN conda clean -afy
+
+
+# ==============================================================================
+# --- Stage 2: The "Final" Development Stage                                  ---
+# ==============================================================================
+# Purpose: This final stage creates the lean, secure development image. We start
+# from a minimal Debian base image ('bookworm-slim') instead of the larger
+# Miniconda image. We then selectively copy only the necessary artifacts (the
+# created conda environment and the application code) into it. This practice
+# significantly reduces the final image size and attack surface.
+# ------------------------------------------------------------------------------
+    FROM debian:bookworm-slim AS final
+
+    # --- Install Essential Runtime System Dependencies ---
+    # Install a minimal set of system libraries required at runtime.
+    #   - `apt-get update`: Refreshes the local package index.
+    #   - `apt-get install -y --no-install-recommends`: Installs packages.
+    #     - `-y`: Answers "yes" to prompts.
+    #     - `--no-install-recommends`: A crucial flag for small images. It tells the
+    #       package manager to only install the main dependencies, not optional or
+    #       recommended packages, which can add significant bloat.
+    #   - `tini`: A tiny but powerful 'init' system for containers. It correctly
+    #     forwards signals to child processes and reaps zombie processes, which helps
+    #     ensure graceful application shutdowns (e.g., when you run `docker stop`).
+    #   - `netcat-openbsd`: A simple networking utility often used in entrypoint
+    #     scripts for health checks (e.g., waiting for a database to be ready).
+    #   - `&& rm -rf /var/lib/apt/lists/*`: This command cleans up the apt cache
+    #     after installation, further reducing the final image size.
+    RUN apt-get update && apt-get install -y --no-install-recommends \
+        tini \
+        netcat-openbsd \
+        && rm -rf /var/lib/apt/lists/*
+
+# --- Dynamic User Creation (Critical for Dev) ---
+# This section is preserved exactly as you wrote it. It accepts host UID/GID
+# to prevent file permission issues with bind mounts.
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+RUN groupadd -f -g ${HOST_GID} appgroup
+RUN useradd --shell /bin/bash --uid ${HOST_UID} --gid ${HOST_GID} --create-home appuser
+
+# --- Copy Artifacts from Builder Stage ---
+# Copy the entire Conda environment created in the builder stage.
+COPY --from=builder /opt/conda/envs/image-similarity-dev-env /opt/conda/envs/image-similarity-dev-env
+
+# --- Environment Variables ---
+# Set up the environment for the application.
+# Add the conda environment's bin directory to the system's PATH. This makes all
+# development tools like `python`, `pytest`, `gunicorn`, and `black` directly
+# available on the command line inside the container.
+ENV PATH /opt/conda/envs/image-similarity-dev-env/bin:$PATH
+# Set standard Python environment variables.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# --- Application Setup for Bind Mounting ---
+# Set the working directory where the application code will be mounted.
+WORKDIR /home/appuser/app
+
+# IMPORTANT: We change the ownership of the EMPTY working directory to our
+# dynamically created user. When you later run the container and mount your
+# local source code into `/home/appuser/app`, this user will have the necessary
+# permissions to read, write, and execute files, which is essential for tasks
+# like auto-reloading servers or running tests that generate cache files.
+RUN chown appuser:appgroup /home/appuser/app
+
+# Copy only the entrypoint script into the image and make it executable. The rest
+# of the code will be mounted from the host.
+COPY --chown=appuser:appgroup docker-entrypoint.sh .
+RUN chmod +x ./docker-entrypoint.sh
+
+# Switch the container's active user to the non-root user we created. All
+# subsequent commands and the main container process will run as this user.
+USER appuser
+
+# --- Port Exposure ---
+# Document the ports that the development services will listen on.
+EXPOSE 5001 8000 8501 8502
+
+# --- Execution ---
+# Use 'tini' as the main process to ensure graceful process management.
+ENTRYPOINT ["/usr/bin/tini", "--", "./docker-entrypoint.sh"]
+
+# --- Default Development Command ---
+# The default command for the development container is to start an interactive
+# bash shell. This is intentional. It keeps the container running in the
+# background so you can:
+#   1. Use `docker exec -it <container_id> /bin/bash` to get a shell inside the
+#      fully configured environment.
+#   2. Start your development server, run tests, or execute any other command
+#      from within that interactive shell.
+#   3. The `docker-compose.yml` file will typically override this CMD to start
+#      a live-reloading server directly.
+CMD ["/bin/bash"]

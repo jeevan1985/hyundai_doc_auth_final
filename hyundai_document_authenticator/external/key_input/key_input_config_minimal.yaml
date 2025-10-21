@@ -1,0 +1,74 @@
+# Key Input Orchestrator — Minimal Config
+#
+# Purpose: Drive the pipeline using a key table (CSV/Excel/JSON) of filenames.
+# Path resolution: Relative paths are resolved relative to THIS file.
+# Quick start:
+#   1) Set key_input.input_table_path to your CSV/Excel file.
+#   2) Choose data_source.mode: local or api.
+#   3) If local: set local.search_roots.
+#      If api: set api.api_endpoint and use env for Authorization.
+#
+# Safe defaults:
+#   - Minimal logging and no destructive operations.
+#   - Network access disabled unless mode=api.
+#   - Credentials should come from environment variables.
+
+logging:
+  # Purpose: Housekeeping for old logs.
+  # Default if omitted: backup_logs=false, remove_logs_days=7.
+  # Allowed: booleans and positive integers.
+  backup_logs: false
+  remove_logs_days: 7
+
+key_input:
+  # Path to the key table listing filenames to process.
+  # Default if omitted: REQUIRED; the code expects a valid path.
+  # Formats: .csv, .xlsx/.xls, .json, .jsonl
+  input_table_path: ../../mock_api_TEST/filtered_rows.xlsx
+
+  # Column in the key table containing the filename.
+  # Default if omitted: "파일명".
+  # Allowed: any existing column name in your table.
+  file_name_column: "파일명"
+
+  # Batch size passed into the workflow; reduce if memory is limited.
+  # Default if omitted: 200 in code; here we set a conservative value.
+  # Allowed: positive integer.
+  batch_size: 200
+
+# Data source selection: resolve files locally or fetch via API.
+data_source:
+  # Purpose: Choose how to get TIFs.
+  # Default if omitted: api (code default). Safer local default here.
+  # Allowed: local | api
+  mode: local
+
+  local:
+    # Folders to search for files; recursive search is used by default in code.
+    # Default if omitted: [] (no roots).
+    # Allowed: list of existing directories.
+    search_roots:
+      - ../../mock_api_TEST/mock_api_server_images
+
+  api:
+    # API endpoint to retrieve images for a given filename and metadata.
+    # Default if omitted and mode=api: REQUIRED.
+    api_endpoint: "http://127.0.0.1:5001/images"
+
+    # HTTP headers; provide credentials via environment variables.
+    # Example: Authorization: "Bearer ${IMAGE_SIM_API_KEY}"
+    # Default if omitted: {}
+    headers:
+      Authorization: "Bearer ${IMAGE_SIM_API_KEY}"
+      Content-Type: "application/json"
+
+    # Map the filename column to the API parameter expected by the server.
+    # Default if omitted: you must set either api_filename_param or param_map.
+    request_mapping:
+      param_map:
+        "파일명": "filename"
+
+    # Save policy for API downloads; prefer transient storage by default.
+    # Default if omitted: persist_downloads=false.
+    persist_downloads: false
+    api_output_save_path: ../../instance/api_downloads

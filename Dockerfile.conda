@@ -1,0 +1,168 @@
+# ==============================================================================
+#         Production Dockerfile (Debian + Conda Multi-stage)
+# ==============================================================================
+# This Dockerfile builds a secure and highly reproducible image for the
+# application using a Conda-based multi-stage build.
+
+# ==============================================================================
+# --- Stage 1: The "Builder" Stage                                           ---
+# ==============================================================================
+# Purpose: This initial stage is a temporary build environment. Its sole
+# responsibility is to install all necessary software dependencies (Python, C
+# libraries, etc.) into a self-contained environment using the `environment.yml`
+# file. We use a standard Miniconda image as a starting point.
+# ------------------------------------------------------------------------------
+FROM continuumio/miniconda3:latest AS builder
+
+
+# Set the working directory within the builder stage. This is a temporary
+# location to store files needed for the build process.
+WORKDIR /app
+
+# --- Update Conda (Best Practice) ---
+# Before installing anything else, it's a best practice to update the conda
+# package manager itself. This ensures we have the latest bug fixes and features
+# for the package manager, leading to a more stable and reliable build process.
+#   - `conda update`: The command to update packages.
+#   - `-n base`: Specifies that we are updating a package in the 'base' conda environment.
+#   - `-c conda-forge`: Specifies the 'conda-forge' channel, which is a community-led
+#     collection of recipes and packages that is often more up-to-date than the
+#     default channel.
+#   - `conda`: The name of the package we are updating.
+#   - `-y`: Automatically answers "yes" to any prompts, making it suitable for automation.
+RUN conda update -n base -c conda-forge conda -y
+
+# --- Leverage Docker Layer Caching ---
+# Copy ONLY the environment definition file into the build context. By copying
+# this file separately, we leverage Docker's layer caching mechanism. The next,
+# very time-consuming `conda env create` step will only be re-executed if the
+# contents of `environment.yml` have changed. If the file is unchanged, Docker
+# will use the cached layer, making subsequent builds much faster.
+COPY environment.yml .
+
+# --- Create the Environment with conda ---
+# This is the core step of the builder stage. We use conda to create the application's
+# dedicated environment from the specification in `environment.yml`.
+#   - `conda env create`: conda's direct, faster equivalent of `conda env create`.
+#   - `-f environment.yml`: Specifies the file that contains the list of
+#     dependencies, channels, and the environment name.
+# conda will create this new environment in a separate directory inside the container,
+# typically at `/opt/conda/envs/your-env-name`.
+RUN conda env create -f environment.yml 
+
+# --- Optional Cleanup to Reduce Image Size ---
+# After the environment is created, we can clean up caches and temporary files to
+# reduce the size of the environment directory.
+#   - `conda clean`: The command to remove unused files.
+#   - `-a`: Removes all unused packages and caches (index cache, lock files, tarballs).
+#   - `-f`: Force removal of specified directories.
+#   - `-y`: Automatically answers "yes" to prompts.
+# This makes the environment we copy to the final stage as lean as possible.
+RUN conda clean -afy
+
+
+# ==============================================================================
+# --- Stage 2: The "Final" Production Stage                                  ---
+# ==============================================================================
+# Purpose: This final stage creates the lean, secure production image. We start
+# from a minimal Debian base image ('bookworm-slim') instead of the larger
+# Miniconda image. We then selectively copy only the necessary artifacts (the
+# created conda environment and the application code) into it. This practice
+# significantly reduces the final image size and attack surface.
+# ------------------------------------------------------------------------------
+FROM debian:bookworm-slim AS final
+
+# --- Install Essential Runtime System Dependencies ---
+# Install a minimal set of system libraries required at runtime.
+#   - `apt-get update`: Refreshes the local package index.
+#   - `apt-get install -y --no-install-recommends`: Installs packages.
+#     - `-y`: Answers "yes" to prompts.
+#     - `--no-install-recommends`: A crucial flag for small images. It tells the
+#       package manager to only install the main dependencies, not optional or
+#       recommended packages, which can add significant bloat.
+#   - `tini`: A tiny but powerful 'init' system for containers. It correctly
+#     forwards signals to child processes and reaps zombie processes, which helps
+#     ensure graceful application shutdowns (e.g., when you run `docker stop`).
+#   - `netcat-openbsd`: A simple networking utility often used in entrypoint
+#     scripts for health checks (e.g., waiting for a database to be ready).
+#   - `&& rm -rf /var/lib/apt/lists/*`: This command cleans up the apt cache
+#     after installation, further reducing the final image size.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tini \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# --- Create a Dedicated Non-Root User (Security Best Practice) ---
+# Running containers as a non-root user is a fundamental security principle.
+# If an attacker were to exploit a vulnerability in the application, their
+# privileges within the container would be limited, preventing them from doing
+# system-level damage.
+#   - `groupadd -r appgroup`: Creates a system group named 'appgroup'.
+#   - `useradd --no-log-init -r -g appgroup appuser`: Creates a system user named
+#     'appuser' and adds them to the 'appgroup' group.
+RUN groupadd -r appgroup && useradd --no-log-init -r -g appgroup appuser
+
+# --- Copy the conda Environment from the Builder Stage ---
+# This `COPY` command is the heart of the multi-stage build. It reaches back
+# into the 'builder' stage (specified by `--from=builder`) and copies the entire
+# fully-formed conda environment into our final image. This gives us all our
+# complex dependencies without any of the build tools (like compilers or conda
+# itself) that we no longer need.
+COPY --from=builder /opt/conda/envs/image-similarity-env /opt/conda/envs/image-similarity-env
+
+# --- Configure Environment Variables ---
+# Set up the environment for the application to run correctly.
+#   - `PATH`: We prepend the `bin` directory of our conda environment to the
+#     system's PATH. This allows us to run commands like `python` or `gunicorn`
+#     directly, without having to use `conda activate` or specify the full path.
+ENV PATH /opt/conda/envs/image-similarity-env/bin:$PATH
+#   - `PYTHONUNBUFFERED=1`: This forces Python to send print and log statements
+#     directly to stdout/stderr without buffering them. In a container, this is
+#     essential for viewing logs in real-time via `docker logs`.
+#   - `PYTHONDONTWRITEBYTECODE=1`: Prevents Python from creating `.pyc` files.
+#     These compiled bytecode files offer a minor startup performance boost, but
+#     in an immutable container context, they are unnecessary and just add clutter.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# --- Set Up Application Directory and Code ---
+# Set the working directory for the application.
+WORKDIR /home/appuser/app
+# Copy the application source code into the working directory.
+#   - `--chown=appuser:appgroup`: This important flag ensures that the files being
+#     copied are owned by the non-root user we created. This prevents permission
+#     errors when the application tries to read or write files.
+COPY --chown=appuser:appgroup . .
+
+# Make the entrypoint script executable for the user. This is a critical
+# step to ensure the ENTRYPOINT command can run successfully.
+RUN chmod +x ./docker-entrypoint.sh
+
+# --- Switch to the Non-Root User ---
+# From this point forward, all subsequent commands in the Dockerfile (and the
+# container's main process) will be executed as the 'appuser'. This is the final
+# step in locking down the container's runtime security.
+USER appuser
+
+# --- Expose Application Ports ---
+# The `EXPOSE` instruction documents which network ports the container's
+# application is expected to listen on. It does not actually publish the ports to
+# the host. Publishing is done with the `-p` or `-P` flag in the `docker run` command.
+EXPOSE 5001 8000 8501 8502
+
+# --- Define the Container's Entrypoint ---
+# The `ENTRYPOINT` configures the main executable that will run when the container
+# starts. We use `tini` as our entrypoint to properly manage the application process.
+#   - `["/usr/bin/tini", "--", ...]` : This is the recommended "exec form". `tini`
+#     starts first (as PID 1), and then executes our entrypoint script. The `--`
+#     separates tini's options from the command it will run.
+# This ensures that OS signals are handled correctly for graceful shutdowns.
+ENTRYPOINT ["/usr/bin/tini", "--", "/home/appuser/app/docker-entrypoint.sh"]
+
+# --- Define the Default Command ---
+# The `CMD` specifies the default argument to be passed to the `ENTRYPOINT`.
+# In this case, "flask-api" will be passed as an argument to the
+# `docker-entrypoint.sh` script. This makes the container's behavior configurable,
+# as a user can easily override this CMD when running the container
+# (e.g., `docker run my-image bash` would run a shell instead of the API).
+CMD ["scheduler"]

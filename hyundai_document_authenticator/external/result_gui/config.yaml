@@ -1,0 +1,109 @@
+# ============================================================================
+# Result GUI Configuration (self-contained module)
+# ----------------------------------------------------------------------------
+# Precedence and source of DB settings (important):
+# 1) The app looks for a .env file placed next to this config.yaml. Keys:
+#      - POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD,
+#        POSTGRES_DB, POSTGRES_TABLE_NAME, POSTGRES_APP_USER_TABLE_NAME
+#    A .env is optional; OS environment variables with the same keys override
+#    .env values if both exist.
+# 2) The flag 'user_environment_db_config' controls precedence:
+#      - true  -> Prefer .env/OS environment values; fall back to YAML.
+#      - false -> Prefer YAML values; fall back to .env/OS environment.
+# 3) If a YAML DB field is provided but blank (""), the loader treats it as
+#    missing and will use .env/OS env depending on the flag above.
+# 4) Non-DB settings (use_csv, csv_path, auth_db_schema, web_port, debug_mode,
+#    secret_key) come only from YAML.
+# ----------------------------------------------------------------------------
+
+# Prefer environment variables or .env for DB config? (default: true in code)
+# Accepted values: true/false, yes/no, 1/0, y/n
+user_environment_db_config: true
+
+# ----------------------------------------------------------------------------
+# 1) RESULTS SOURCE SELECTION
+# ----------------------------------------------------------------------------
+# use_csv:
+#   - true  -> load results from CSV at csv_path.
+#   - false -> load results from the PostgreSQL table at results_table.
+# Default if omitted: false
+use_csv: false
+
+# csv_path:
+#   Path to CSV file when use_csv is true. Required in CSV mode.
+#   Examples: "./debug_results.csv", "D:/data/results.csv"
+csv_path: "./debug_results.csv"
+
+# ----------------------------------------------------------------------------
+# 2) DATABASE CONNECTION (used for auth always; for results when use_csv=false)
+# ----------------------------------------------------------------------------
+# Mapping from .env/OS env to YAML keys:
+#   POSTGRES_HOST                -> db_host
+#   POSTGRES_PORT                -> db_port
+#   POSTGRES_USER                -> db_user
+#   POSTGRES_PASSWORD            -> db_password
+#   POSTGRES_DB                  -> db_name
+#   POSTGRES_TABLE_NAME          -> results_table (schema-qualify below)
+#   POSTGRES_APP_USER_TABLE_NAME -> app_user_table (table name only; schema via auth_db_schema)
+#
+# Provided environment values (your latest request):
+#   POSTGRES_DB=similar_docs_db
+#   POSTGRES_HOST=192.168.1.203
+#   POSTGRES_PORT=6432
+#   POSTGRES_USER=jeevan
+#   POSTGRES_PASSWORD=jeevan
+#   POSTGRES_TABLE_NAME=doc_similarity_results_hyundai
+#   POSTGRES_APP_USER_TABLE_NAME=users
+#
+# With user_environment_db_config: true, the app first uses .env/OS values; if a
+# value is missing there, it falls back to the YAML values below.
+
+# Connection
+db_host: "192.168.1.203"  # Env override: POSTGRES_HOST
+db_port: 6432  # Env override: POSTGRES_PORT
+
+db_user: ""  # Env override: POSTGRES_USER
+db_password: ""  # Env override: POSTGRES_PASSWORD
+db_name: ""  # Env override: POSTGRES_DB
+
+# Results table (schema-qualified). Adjust schema if different.
+results_table: "public.doc_similarity_results_hyundai"  # Env override: POSTGRES_TABLE_NAME
+
+# Authentication users table location
+# - Schema for the users table (like a folder):
+auth_db_schema: "public"
+# - Table name for the users table (name only, no schema):
+app_user_table: "users"  # Env override: POSTGRES_APP_USER_TABLE_NAME
+
+# ----------------------------------------------------------------------------
+# 3) WEB SERVER SETTINGS
+# ----------------------------------------------------------------------------
+# HTTP port for Flask app. Code default when omitted: 8080
+web_port: 5000
+# Do NOT enable debug in production. Code default: false
+debug_mode: false
+
+# ----------------------------------------------------------------------------
+# 4) SECURITY SETTINGS
+# ----------------------------------------------------------------------------
+# enable_2F_authentication:
+#   - true  -> after password verification, require a time-based one-time code
+#              (e.g., Google/Microsoft Authenticator).
+#   - false -> password-only login (current behavior).
+# Default if omitted: false
+enable_2F_authentication: true
+
+# Optional: provide a fixed secret key for signing session and remember-me cookies.
+# - Why: If this value changes (e.g., app restart without a fixed key), existing sessions become invalid and users are logged out.
+# - Security: Use a long, random value (>= 32 bytes). Keep it secret; avoid committing real production secrets to Version Control System (VCS).
+# - Rotation: Rotate during a planned maintenance window to avoid unexpected logouts.
+# - Generation hint (PowerShell): [System.Convert]::ToBase64String((1..48 | % {Get-Random -Max 256}))
+# - Generation hint (Python):    python -c "import secrets; print(secrets.token_urlsafe(48))"
+# secret_key: ""  # Provide via environment (RESULT_GUI_SECRET_KEY) or leave empty to auto-generate at runtime (code generates a secure default when omitted).
+
+# Remember-me cookie duration in days (applies only when the user checks "Remember me" on login).
+# - Behavior: Controls persistent login cookie lifetime across browser restarts until expiry or manual logout.
+# - Trade-offs: Longer durations improve convenience but increase risk on shared/unlocked machines.
+# - Bounds: The app clamps this to 1..365 days.
+# - Recommendation: Pick based on your security policy (e.g., 7, 14, 30).
+remember_days: 14

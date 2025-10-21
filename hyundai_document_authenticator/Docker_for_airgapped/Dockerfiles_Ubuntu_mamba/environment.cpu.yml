@@ -1,0 +1,74 @@
+# ===================================================================
+#   CPU Environment - v1
+# ===================================================================
+# CPU-only environment for building and running the application without CUDA.
+# Mirrors the GPU env where reasonable, while swapping to CPU packages.
+
+name: image-similarity-cpu
+
+channels:
+  - conda-forge
+  - anaconda
+  - pytorch
+  - paddle
+  - defaults
+
+dependencies:
+  # --- Core & CRITICAL Constraints ---
+  - python=3.10
+  - numpy<2.0        # CRITICAL: Compatibility with faiss-cpu, torch, etc.
+  - sympy=1.13.1     # Matches GPU env constraints
+  - ninja
+
+  # --- CPU PyTorch Stack ---
+  - pytorch=2.0.1
+  - torchvision=0.15.2
+  - cpuonly          # Ensures CPU builds from the pytorch channel
+  - conda-forge::faiss-cpu
+
+  # --- PaddlePaddle (CPU) ---
+  - paddlepaddle
+
+  # --- Core ML & DS Libraries ---
+  - pandas
+  - scikit-learn
+  - matplotlib
+  - seaborn       # Dependency for ultralytics
+  - psutil        # Dependency for ultralytics
+
+  # --- Computer Vision & OCR ---
+  - opencv
+  - easyocr
+  - pytesseract
+  - pillow<11.0   # Pinned for compatibility
+
+  # --- NLP & Language Models ---
+  - transformers=4.31.0
+  - openai
+  - tiktoken
+
+  # --- Web & Utility Libraries ---
+  - waitress
+  - pyyaml
+  - tqdm
+  - pydantic
+  - email-validator
+  - psycopg2
+  - beautifulsoup4
+  - python-dotenv
+  - lxml
+
+  # --- Other Specified Packages ---
+  - onnxruntime
+  - pytest
+  - tomli
+  - python-docx
+  - py-cpuinfo
+
+  # --- PIP-only packages ---
+  - pip
+  - pip:
+      - paddleocr
+      - ultralytics
+      - "timm>=0.9.0,<1.0.0"
+      - "numpy<2.0" 

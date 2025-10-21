@@ -1,0 +1,137 @@
+# ==============================================================================
+#         Production Dockerfile for Red Hat Enterprise Linux (RHEL)
+# ==============================================================================
+# This Dockerfile builds a secure, efficient, and production-ready image for the
+# application using Red Hat Universal Base Images (UBI).
+
+
+# ==============================================================================
+# --- Stage 1: The "Builder" Stage (RHEL UBI 8)                              ---
+# ==============================================================================
+# Purpose: This stage installs all dependencies, including build-time tools
+# that we don't need in our final, lean production image. We use the full UBI 8
+# base image here to get access to the more powerful 'dnf' package manager.
+FROM registry.access.redhat.com/ubi8/python-311:latest AS builder
+
+# --- Environment Setup ---
+# Set common Python environment variables for optimized container behavior.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+# Set common pip environment variables to optimize installs.
+ENV PIP_NO_CACHE_DIR=off
+ENV PIP_DISABLE_PIP_VERSION_CHECK=on
+
+# --- FIX: Switch to the 'root' user to install system packages ---
+# The ubi8/python-311 base image starts as a non-root user for security.
+# We must temporarily switch to root to use the 'dnf' package manager.
+USER root
+
+#------------------------------------------
+# --- System Dependencies ---
+# Install Python 3.11, its pip package, its development headers (`-devel`),
+# and build tools using 'dnf'.
+# 'python3.11-devel' is critical for compiling C-extensions.
+# '--nodocs' saves space. 'dnf clean all' is crucial for keeping the layer small.
+# Use this below command with extra package if using non specialized base rhel package
+# RUN dnf install -y --nodocs python3.11 python3.11-pip python3.11-devel gcc gcc-c++ make \
+#     && dnf clean all
+#-------------------------------------------
+# --- System Dependencies ---
+# Install build tools ('gcc', 'make') and the 'nc' utility for our entrypoint.
+# 'nmap-ncat' provides the 'nc' command required by the entrypoint script's
+# wait-for-it function. We install it here in the builder to avoid bloating
+# the final image with its dependencies.
+RUN dnf install -y --nodocs gcc gcc-c++ make nmap-ncat \
+    && dnf clean all
+
+# --- Python Dependencies ---
+# Set the working directory according to Red Hat's SCL (Software Collections) standards.
+WORKDIR /opt/app-root/src
+
+# Copy only the requirements file first to leverage Docker's layer caching.
+COPY requirements.txt .
+
+# Install all Python dependencies specified in requirements.txt.
+# We use 'python3.11 -m pip' to ensure we're using the correct pip for our version.
+RUN python3.11 -m pip install --upgrade pip
+RUN python3.11 -m pip install -r requirements.txt
+
+# ==============================================================================
+# --- Stage 2: The "Final" Production Stage (RHEL UBI 8 Python)              ---
+# ==============================================================================
+# Purpose: This stage creates the final, minimal, and secure image. It starts
+# with the pre-built UBI Python image, which is optimized for running Python apps.
+# FROM registry.access.redhat.com/ubi8/python-310:latest AS final
+FROM registry.access.redhat.com/ubi8/python-311:latest AS final
+
+# Switch to the root user to perform administrative tasks.
+USER root
+
+# --- START: FIX FOR PRODUCTION RHEL DOCKERFILE ---
+# Install the required system library for OpenCV/Pillow at runtime.
+# This must be run as root before switching to the non-root user.
+RUN dnf install -y --nodocs \
+    mesa-libGL \
+    glib2 \
+    && dnf clean all
+# --- END: FIX ---
+
+# --- Environment Variables ---
+# Set the same Python environment variables for the final image.
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+# Set the PYTHONPATH to include our app's directory.
+ENV PYTHONPATH=/opt/app-root/src
+
+# --- Copy Artifacts from Builder Stage ---
+# The rhel Python image places site-packages in a version-specific directory.
+# We copy the installed dependencies from the 'builder' stage.
+# NOTE: The pip install in the builder stage places libraries in a standard system
+# path that the final rhel Python image understands and uses.
+# These are copied as root.
+COPY --from=builder /opt/app-root/lib64/python3.11/site-packages /opt/app-root/lib64/python3.11/site-packages
+# Copy any command-line executables installed by pip (like 'gunicorn', 'flask', etc.).
+# These are placed relative to the builder's WORKDIR.
+# COPY --from=builder /opt/app-root/bin /opt/app-root/bin # might not work since /opt/app-root/bin destination is not public directory
+# Copy the executables to a standard system path that is always available.
+COPY --from=builder /opt/app-root/bin /usr/local/bin
+
+# --- FIX ---
+# Copy ONLY the 'nc' binary from the builder. This makes the final image
+# leaner and more secure than installing the entire 'nmap-ncat' package here.
+COPY --from=builder /usr/bin/nc /usr/bin/nc
+
+# --- Application Setup ---
+# Set the working directory. The UBI Python image is pre-configured to use
+# this directory and grant permissions to the default user (1001).
+WORKDIR /opt/app-root/src
+
+# --- The Optimal Ownership and Permission Pattern for RHEL ---
+# Use '--chown' with the default UBI user ID (1001) and group ID (0) to set
+# ownership as the files are copied. This is fast and secure.
+# The " . . " copies everything from the build context (including docker-entrypoint.sh)
+# to the current WORKDIR. This is more efficient than multiple COPY commands.
+COPY --chown=1001:0 . .
+
+# Set the executable bit on the entrypoint script. This is run as root.
+RUN chmod +x ./docker-entrypoint.sh
+
+# --- Final User Switch (Security Best Practice) ---
+# Switch to the default non-root user (UID 1001) provided by the UBI image.
+# We did not need to create this user; it comes with the base image.
+# All subsequent commands in the container will run as this user.
+USER 1001
+
+# --- Port Exposure ---
+# Document which ports the application services listen on.
+# You can list them on a single line or multiple lines.
+EXPOSE 5001 8000 8501 8502
+
+# --- Execution ---
+# Set the entrypoint to our custom script. We use the full path for clarity.
+# This script will be the first thing that runs when the container starts.
+ENTRYPOINT ["/opt/app-root/src/docker-entrypoint.sh"]
+
+# Set the default command. This value will be passed as an argument to the
+# ENTRYPOINT script if no other command is provided.
+CMD ["flask-api"]
