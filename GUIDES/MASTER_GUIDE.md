@@ -7,7 +7,7 @@
 > ⚠️ **Architectural Mandate (Non-Negotiable)**
 > - **Persistence Strategy**: Host-path bind mounts are the single source of truth.
 > - **Host Directories**:
->   - `./appdata`: All persistent application data (PostgreSQL, Qdrant, FAISS indices, instance files).
+>   - `./appdata`: All persistent application data (PostgreSQL, FAISS indices, instance files).
 >   - `./applog`: All application logs.
 > - **Prerequisite**: `mkdir -p appdata applog` (plus subfolders) is **mandatory** before any launch.
 > - **Backup/Restore**: Strictly operate on host paths (`tar`, `cp`, `rsync`). **Do not** use `docker volume` commands for data management.
@@ -84,18 +84,17 @@
     - [3.7. `extra_tools/code_audit.py`](#37-extra_toolscode_auditpy)
   - [Part 4: 💻 Conda (Host) Runbook (Non-Docker)](#part-4--conda-host-runbook-non-docker)
   - [Part 5: 🏗️ Architecture Deep Dive](#part-5-️-architecture-deep-dive)
-  - [Part 6: 🛡️ Disaster Recovery \& Runbooks](#part-6-️-disaster-recovery--runbooks)
+  - [Part 6: 🛡️ Disaster Recovery & Runbooks](#part-6-️-disaster-recovery--runbooks)
     - [6.1. End-to-End DR Drill](#61-end-to-end-dr-drill)
     - [6.2. RPO/RTO Guidance](#62-rporto-guidance)
-  - [Part 7: 🔒 Security Hardening \& Secrets](#part-7--security-hardening--secrets)
-  - [Part 8: ⚡ Performance \& Sizing Guide](#part-8--performance--sizing-guide)
-  - [Part 9: 📊 Observability \& Logging Strategy](#part-9--observability--logging-strategy)
-  - [Part 10: 🎓 Advanced Container \& Image Management](#part-10--advanced-container--image-management)
+  - [Part 7: 🔒 Security Hardening & Secrets](#part-7--security-hardening--secrets)
+  - [Part 8: ⚡ Performance & Sizing Guide](#part-8--performance--sizing-guide)
+  - [Part 9: 📊 Observability & Logging Strategy](#part-9--observability--logging-strategy)
+  - [Part 10: 🎓 Advanced Container & Image Management](#part-10--advanced-container--image-management)
   - [Part 11: 🔌 External Services Integration](#part-11--external-services-integration)
   - [Part 12: ✈️ Air-Gapped Deployment (Deepened)](#part-12-️-air-gapped-deployment-deepened)
-  - [Part 13: 💾 Data Model \& Persistence Reference](#part-13--data-model--persistence-reference)
+  - [Part 13: 💾 Data Model & Persistence Reference](#part-13--data-model--persistence-reference)
     - [13.1. PostgreSQL Schema](#131-postgresql-schema)
-    - [13.2. Qdrant Collections](#132-qdrant-collections)
     - [13.3. Host Directory Structure (`./appdata` and `./applog`)](#133-host-directory-structure-appdata-and-applog)
   - [Part 14: 🐧 Windows vs. Linux/macOS Cheatsheet](#part-14--windows-vs-linuxmacos-cheatsheet)
 
@@ -106,7 +105,7 @@
 
 | Operation | Command (Linux/macOS) | Command (Windows PowerShell) |
 | :--- | :--- | :--- |
-| **Prerequisites** | `mkdir -p appdata applog; mkdir -p appdata/postgres appdata/qdrant appdata/instance` | `mkdir appdata, applog, appdata/postgres, appdata/qdrant, appdata/instance` |
+| **Prerequisites** | `mkdir -p appdata applog; mkdir -p appdata/postgres appdata/instance` | `mkdir appdata, applog, appdata/postgres, appdata/instance` |
 | **Start (CPU)** | `docker compose -f docker-compose.conda.yaml up -d --profile all` | `docker compose -f docker-compose.conda.yaml up -d --profile all` |
 | **Start (GPU)** | `docker compose -f docker-compose.gpu.conda.yaml up -d --profile all` | `docker compose -f docker-compose.gpu.conda.yaml up -d --profile all` |
 | **Stop System** | `docker compose -f docker-compose.conda.yaml down` | `docker compose -f docker-compose.conda.yaml down` |
@@ -118,7 +117,6 @@
 
 **Key Environment Variables (`.env` file)**:
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: Internal PostgreSQL credentials.
-- `POSTGRES_HOST_EXTERNAL`, `QDRANT_HOST_EXTERNAL`: Set these to use external DB/Qdrant instances.
 - `APP_LOG_DIR`: Mapped to `./applog` inside containers. For host runs, set `export APP_LOG_DIR=$(pwd)/applog`.
 
 ---
@@ -128,7 +126,7 @@
 
 ### 2.1. Core Concepts
 - **Host Bind Mounts**: Your data lives in `./appdata` and `./applog` on the host machine. The Docker containers are stateless; the data is yours to manage directly.
-- **Docker Compose Profiles**: Services are grouped into profiles (`postgres`, `qdrant`, `gui`, etc.). You activate what you need. `--profile all` runs everything.
+- **Docker Compose Profiles**: Services are grouped into profiles (`postgres`, `gui`, etc.). You activate what you need. `--profile all` runs everything.
 - **`cli_runner` Service**: A dedicated, disposable container for running all command-line tools.
 
 ### 2.2. Quick Start: Your First Launch
@@ -138,10 +136,10 @@ This must be done once per environment.
 ```bash
 # Linux/macOS
 mkdir -p appdata applog
-mkdir -p appdata/postgres appdata/qdrant appdata/instance appdata/downloads
+mkdir -p appdata/postgres appdata/instance appdata/downloads
 
 # Windows PowerShell
-mkdir appdata, applog, appdata/postgres, appdata/qdrant, appdata/instance, appdata/downloads
+mkdir appdata, applog, appdata/postgres, appdata/instance, appdata/downloads
 ```
 * **What it does**: Creates the host directories that Docker will mount for data and logs.
 * **Why you'd use it**: This is a non-negotiable prerequisite. Without these, containers will fail to start.
@@ -172,49 +170,6 @@ copy .env.example .env
 * **What it does**: Starts all services defined in the compose file(s) in detached mode (`-d`).
 * **Why you'd use it**: This is the standard way to run the entire application stack.
 
-<br>
-
-- **Alternative: Development via Conda Environment Image + Mounted Code**:
-
-  **Concept:** This method uses a Docker image that *only* contains the Conda dependencies from `environment.yml`, without any application code. You then mount your local code into the container at runtime. It's like having a portable, disposable Conda environment for development and debugging.
-
-  **Steps:**
-
-  1.  **Create a dedicated Dockerfile** for this environment. I will create a file named `Dockerfile.dev-env` for you with the following content:
-      ```dockerfile
-      # Dockerfile.dev-env
-      # This Dockerfile creates a self-contained Conda environment.
-      FROM continuumio/miniconda3:latest
-      WORKDIR /workspace
-      COPY environment.yml .
-      RUN conda env create -f environment.yml && conda clean -afy
-      # The default command will be a shell running inside the activated environment.
-      # The environment name 'image-similarity-env' is taken from your environment.yml.
-      ENTRYPOINT ["conda", "run", "-n", "image-similarity-env", "/bin/bash"]
-      ```
-
-  2.  **Build the environment image:**
-      ```bash
-      docker build -t hyundai-dev-env -f Dockerfile.dev-env .
-      ```
-
-  3.  **Run interactively with your code mounted:**
-      This command starts a container, mounts your project directory into `/workspace`, and gives you a `bash` shell.
-      ```bash
-      # For Linux/macOS
-      docker run -it --rm -v "$(pwd):/workspace" hyundai-dev-env
-
-      # For Windows PowerShell
-      docker run -it --rm -v "${pwd}:/workspace" hyundai-dev-env
-      ```
-
-  4.  **Work inside the container:**
-      You are now "inside" the container. You can run any script, and changes you make to your local code are reflected instantly.
-      ```bash
-      # Example: run the smoke test
-      python hyundai_document_authenticator/tool_smoke_test.py
-      ```
-
 ---
 
 <a id="toc-cli-catalogue"></a>
@@ -239,12 +194,12 @@ The main workflow tool for building indexes and running searches.
 * **Log Location**: `applog/image_similarity_system.log` and console.
 
 **Subcommand: `build-image-index`**
-* **Purpose**: Extracts photos from TIF documents and builds a vector search index (FAISS or Qdrant).
+* **Purpose**: Extracts photos from TIF documents and builds a vector search index (FAISS).
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--folder` | Path | (config) | Folder of TIFs to index. |
-| `--engine` | str | (config) | Vector DB: `faiss`, `qdrant`, `bruteforce`. |
+| `--engine` | str | (config) | Vector DB: `faiss`, `bruteforce`. |
 | `--batch-size` | int | (config) | Batch size for feature extraction. |
 | `--force-rebuild-index` | bool | false | If true, deletes and rebuilds the index. |
 | `--photo-extraction-mode`| str | yolo | `yolo` or `bbox`. |
@@ -258,10 +213,6 @@ docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
   --engine faiss \
   --photo-extraction-mode yolo \
   --yolo-model-path trained_model/yolo_photo_extractor/best.pt
-```
-* **Example Output**:
-```
-INFO: Indexing complete. Total images indexed: 150. Index saved to: appdata/instance/faiss_indices/my_index.faiss
 ```
 
 **Subcommand: `search-doc`**
@@ -281,143 +232,6 @@ docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
   --folder ./hyundai_document_authenticator/data_real \
   --top-doc 5 --top-k 5 \
   --save-to-postgres
-```
-* **Example Output**:
-```
-=== Per-Query Results ===
-Query: N2023100400003THA00100001.tif  photos=2  agg=max  t=1.234s
-   01. N2024030602091THA00100001_13.tif  score=0.9876
-   02. N2024030602100THA00100001_12.tif  score=0.9543
-...
-INFO: Results for 10 queries saved to PostgreSQL table 'doc_similarity_results'.
-```
-
-<a id="toc-cli-database-tester"></a>
-### 3.2. `tool_database_tester.py`
-* **Purpose**: A safe, read-only-first utility to check database connectivity and schema.
-* **Log Location**: `applog/tools/tool_database_tester.log` and console.
-
-**Subcommand: `ping`**
-* **Purpose**: Verifies connectivity to the PostgreSQL database.
-
-**Example:**
-```bash
-docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
-  python hyundai_document_authenticator/tool_database_tester.py ping
-```
-* **Example Output**:
-```
-[INFO] Connected to 'hyundai_docs' at db:5432 as user
-[INFO] Server version: PostgreSQL 15.4 on x86_64-pc-linux-gnu, compiled by gcc, a...
-```
-
-**Subcommand: `ensure-doc-sim-table`**
-* **Purpose**: Creates or validates the `doc_similarity_results` table schema.
-
-**Example (Create if not exists):**
-```bash
-docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
-  python hyundai_document_authenticator/tool_database_tester.py ensure-doc-sim-table
-```
-* **Example Output**:
-```
-[INFO] Created table public.doc_similarity_results with the canonical document-sim schema.
-```
-
-<a id="toc-cli-search-tif-files"></a>
-### 3.3. `tool_search_tif_files_with_key.py`
-* **Purpose**: Validates and runs the key-driven TIF search pipeline, where input filenames are sourced from a CSV/Excel file.
-* **Log Location**: `applog/tools/tool_search_tif_files_with_key.log` and console.
-
-**Example (Dry-run validation):**
-```bash
-docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
-  python hyundai_document_authenticator/tool_search_tif_files_with_key.py \
-  --key-config hyundai_document_authenticator/external/key_input/key_input_config.yaml \
-  --limit-batches 1
-```
-* **Example Output**:
-```
-INFO | key_input_validator | 📦 Batch 1: requested=200 | resolved=198 | missing=2 | 0.123s
-INFO | key_input_validator |   ✅ RESOLVED: /path/to/resolved/file1.tif
-...
-```
-
-<a id="toc-cli-model-downloader"></a>
-### 3.4. `tool_universal_model_downloader.py`
-* **Purpose**: Downloads pre-trained models from TorchVision or Hugging Face for offline use.
-* **Note**: This tool is typically run on an internet-connected machine to prepare models for an air-gapped environment.
-
-**Example (Download ResNet50):**
-```bash
-# Run directly on a machine with internet
-python hyundai_document_authenticator/tool_universal_model_downloader.py torchvision --model_name resnet50
-```
-* **Example Output**:
-```
-INFO - 📁 Ensuring directory exists: 'resnet'
-INFO - ⬇️  Downloading 'resnet50' from TorchVision. This may take a moment...
-INFO - 💾 Saving model weights to 'resnet/resnet50-0676ba61.pth'...
-INFO - 🎉 Successfully downloaded and saved 'resnet50'!
-```
-
-<a id="toc-cli-tiff-aggregator"></a>
-### 3.5. `tool_tiff_aggregator.py`
-* **Purpose**: Combines multiple single-page TIFFs into one multi-page TIFF.
-* **Log Location**: `applog/tools/tool_tiff_aggregator.log` and console.
-
-**Example:**
-```bash
-# This tool operates on the filesystem, so it's often easier to run it
-# inside the container with an interactive shell.
-docker compose -f docker-compose.conda.yaml run --rm cli_runner bash
-
-# Now inside the container:
-python hyundai_document_authenticator/tool_tiff_aggregator.py \
-  --tif-folder-path /path/to/single_page_tiffs \
-  --output-folder-path /path/to/output
-```
-* **Example Output**:
-```
-INFO | tool_tiff_aggregator | Saved combined TIFF to /path/to/output/combined.tif (12 pages, mode=RGB)
-```
-
-<a id="toc-cli-smoke-test"></a>
-### 3.6. `tool_smoke_test.py`
-* **Purpose**: A simple test to verify that all major Python modules and their dependencies can be imported correctly.
-* **Log Location**: Console only.
-
-**Example:**
-```bash
-docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
-  python hyundai_document_authenticator/tool_smoke_test.py
-```
-* **Example Output**:
-```
-INFO: external namespace OK
-INFO: alias modules OK
-INFO: workflow OK True True
-```
-
-<a id="toc-cli-code-audit"></a>
-### 3.7. `extra_tools/code_audit.py`
-* **Purpose**: A static analysis tool to check for missing docstrings, type hints, and other code quality issues.
-* **Log Location**: Console only.
-
-**Example:**
-```bash
-docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
-  python hyundai_document_authenticator/extra_tools/code_audit.py \
-  --root hyundai_document_authenticator
-```
-* **Example Output**:
-```
-=== Code Audit Summary ===
-Files scanned: 85
-Files missing module docstrings: 10
-...
--- hyundai_document_authenticator/some_file.py
-   - function my_func (L50): missing return type
 ```
 
 ---
@@ -453,7 +267,6 @@ You must manually configure the database connections and log directory.
     export POSTGRES_USER=youruser
     export POSTGRES_PASSWORD=yourpass
     export POSTGRES_DB=yourdb
-    export QDRANT_HOST=localhost
     ```
 *   **Windows PowerShell**:
     ```powershell
@@ -470,13 +283,12 @@ python hyundai_document_authenticator/doc_image_verifier.py build-image-index \
   --folder ./path/to/your/tifs \
   --config-path ./hyundai_document_authenticator/configs/image_similarity_config.yaml
 ```
-*   **Note**: In your `image_similarity_config.yaml`, ensure paths for FAISS indices, etc., point to subdirectories within `./appdata`. For example: `faiss_index_path: "appdata/instance/faiss_indices/my_index.faiss"`.
 
 ---
 
 <a id="toc-architecture"></a>
 ## Part 5: 🏗️ Architecture Deep Dive
-*This section would contain the detailed architecture diagrams and explanations from the original `MASTER_GUIDE.md`, which I will preserve.*
+*This section would contain the detailed architecture diagrams and explanations from the original guide, which are preserved but outside the scope of Qdrant-related changes.*
 
 ---
 
@@ -502,8 +314,7 @@ python hyundai_document_authenticator/doc_image_verifier.py build-image-index \
         docker compose -f docker-compose.conda.yaml run --rm cli_runner cli \
           python hyundai_document_authenticator/tool_database_tester.py ping
         ```
-    *   **Qdrant**: Check if collections exist (manual check via UI at `http://localhost:6333/dashboard` or API).
-    *   **File System**: `ls -l appdata/postgres` and `ls -l appdata/qdrant` should show data files.
+    *   **File System**: `ls -l appdata/postgres` should show data files.
 4.  **Start System**: Bring the full stack online.
     ```bash
     docker compose -f docker-compose.conda.yaml up -d --profile all
@@ -544,7 +355,7 @@ python hyundai_document_authenticator/doc_image_verifier.py build-image-index \
 - **Disk Sizing**:
   - **`./appdata` (4TB Total)**:
     - `appdata/postgres` (256GB): Reserved for PostgreSQL data.
-    - `appdata/qdrant` or `appdata/instance/faiss_indices` (~3.5TB): The bulk of the space, for storing vector indexes and image embeddings.
+    - `appdata/instance/faiss_indices` (~3.5TB): The bulk of the space, for storing vector indexes and image embeddings.
     - `appdata/instance/database_images` (Variable): Stores copies of processed images.
   - **`./applog` (10-20GB)**: Sized for log retention, assuming log rotation is active.
 - **GPU Notes**:
@@ -586,11 +397,6 @@ To connect to external databases, set the `*_EXTERNAL` variables in your `.env` 
   ```env
   POSTGRES_HOST_EXTERNAL=your-postgres-host.example.com
   POSTGRES_PORT_EXTERNAL=5432
-  ```
-- **Qdrant**:
-  ```env
-  QDRANT_HOST_EXTERNAL=your-qdrant-host.example.com
-  QDRANT_PORT_EXTERNAL=6333
   ```
 - **`host.docker.internal`**: To connect from a container to a service running on the Docker **host** machine, use `host.docker.internal` as the hostname. This is useful for development.
 
@@ -640,16 +446,11 @@ CREATE TABLE public.doc_similarity_results (
 - **`highest_similarity_score`**: The top aggregated similarity score.
 - **`global_top_docs`**: A JSON array of the top matching documents and their scores.
 
-### 13.2. Qdrant Collections
-- Collection names are defined in `configs/image_similarity_config.yaml`.
-- By default, a collection named `hyundai_sim_search` might be created. It stores high-dimensional vectors for each extracted photo.
-
 ### 13.3. Host Directory Structure (`./appdata` and `./applog`)
 ```
 .
 ├── appdata/
 │   ├── postgres/         # PostgreSQL data files
-│   ├── qdrant/           # Qdrant data files
 │   ├── instance/
 │   │   ├── database_images/ # Stored images
 │   │   └── faiss_indices/   # FAISS index files

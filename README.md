@@ -7,7 +7,7 @@ Production-ready toolkit for TIF document image search, photo extraction, and si
 A project-wide refactor corrected a long-standing typo in the canonical data directory name.
 
 - Canonical path is now: `/appdata`
-- Purpose: persistent application data (e.g., FAISS indices, Qdrant data, caches, logs)
+- Purpose: persistent application data (e.g., FAISS indices, caches, logs)
 
 ### Replacement rules applied across the codebase
 

@@ -480,7 +480,7 @@ def cmd_build_index_with_tif(
     folder: Optional[Path] = typer.Option(None, "--folder", help="Folder of TIF files to derive image index from (overrides config)."),
 
     # Index build parameters
-    engine: Optional[str] = typer.Option(None, "--engine", help="Vector DB provider: faiss|qdrant|bruteforce."),
+    engine: Optional[str] = typer.Option(None, "--engine", help="Vector DB provider: faiss|bruteforce."),
     batch_size: Optional[int] = typer.Option(None, "--batch-size", help="Feature extraction batch size."),
     force_rebuild_index: Optional[bool] = typer.Option(None, "--force-rebuild-index/--no-force-rebuild-index"),
 
@@ -523,7 +523,7 @@ def cmd_build_index_with_tif(
         input_table_path (Optional[Path]): Override the key table path for this run.
         folder (Optional[Path]): Folder of TIF files to derive image index from; overrides config.
 
-        engine (Optional[str]): Vector DB provider: "faiss" | "qdrant" | "bruteforce".
+        engine (Optional[str]): Vector DB provider: "faiss" | "bruteforce".
         batch_size (Optional[int]): Feature extraction batch size.
         force_rebuild_index (Optional[bool]): Force a full rebuild of the index.
 
@@ -762,7 +762,7 @@ def cmd_diagnostics(
     """Print a diagnostic summary of the configured vector provider and datasets.
 
     The command performs a non-destructive inspection of the configured provider
-    (FAISS or Qdrant) and reports:
+    (FAISS) and reports:
     - Provider selection and readiness
     - Total items indexed
     - Shard/collection counts with per-unit sizes
@@ -989,8 +989,8 @@ def cmd_validate_config(
     # vector_database
     vdb = cfg.get("vector_database", {}) or {}
     provider = str(vdb.get("provider", "faiss")).lower()
-    if provider not in {"faiss", "qdrant", "bruteforce"}:
-        errors.append("vector_database.provider must be one of {'faiss','qdrant','bruteforce'}.")
+    if provider not in {"faiss", "bruteforce"}:
+        errors.append("vector_database.provider must be one of {'faiss','bruteforce'}.")
 
     # provider-specific checks
     if provider == "faiss":
@@ -1004,19 +1004,7 @@ def cmd_validate_config(
                     errors.append("FAISS partition_capacity must be a positive integer when provided.")
             except Exception:
                 errors.append("FAISS partition_capacity must be an integer when provided.")
-    elif provider == "qdrant":
-        qc = vdb.get("qdrant", {}) or {}
-        # Either embedded 'location' or server 'host' must be provided
-        if not (qc.get("location") or qc.get("host")):
-            warnings.append("Qdrant: neither 'location' nor 'host' provided; defaults will be used (localhost:6333).")
-        part = qc.get("partition_capacity") or qc.get("max_points_per_collection")
-        if part is not None:
-            try:
-                if int(part) <= 0:
-                    errors.append("Qdrant partition_capacity must be a positive integer when provided.")
-            except Exception:
-                errors.append("Qdrant partition_capacity must be an integer when provided.")
-
+    
     # path checks (do not create or mutate)
     def _optional_dir(path_str: Optional[str], key: str) -> None:
         if not path_str:

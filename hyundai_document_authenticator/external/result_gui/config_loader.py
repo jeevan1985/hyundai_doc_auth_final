@@ -14,8 +14,8 @@ Precedence summary:
     3. When ``user_environment_db_config`` is False (YAML-first):
        - Use YAML values when provided and non-empty; otherwise fall back to
          .env/OS environment values.
-    4. .env values are read from a file named ".env" next to config.yaml; OS
-       environment variables override the .env file.
+    4. .env values are loaded from the repository root (searching upward from this module);
+       if not found, a local ".env" next to config.yaml is used. OS environment variables override the .env file.
 
 Environment variable mapping:
     POSTGRES_HOST                  -> db_host
@@ -236,6 +236,33 @@ def _parse_dotenv(env_path: Path) -> Dict[str, str]:
     return result
 
 
+def _find_env_file(start_dir: Path, filename: str = ".env") -> Optional[Path]:
+    """Locate an environment file by walking upward toward the repository root.
+
+    The search begins at ``start_dir`` and ascends parent directories until a file
+    named ``filename`` is found or the filesystem root is reached.
+
+    Args:
+        start_dir: Directory to start searching from.
+        filename: Environment filename to locate (default: ".env").
+
+    Returns:
+        Optional[Path]: The first matching path if found; otherwise ``None``.
+    """
+    cur = start_dir
+    try:
+        while True:
+            candidate = cur / filename
+            if candidate.exists():
+                return candidate
+            if cur.parent == cur:
+                break
+            cur = cur.parent
+    except Exception:
+        return None
+    return None
+
+
 def _env_to_config_keys(env: Dict[str, str]) -> Dict[str, Any]:
     """Map .env/OS environment variables to internal config keys.
 
@@ -288,8 +315,9 @@ def load_config(path: Path) -> AppConfig:
     # Determine precedence flag (default: environment first)
     prefer_env = _ensure_bool(raw.get("user_environment_db_config", True), "user_environment_db_config")
 
-    # Load environment variables from .env and overlay with OS env
-    dotenv_vars = _parse_dotenv(base_dir / ".env")
+    # Load environment variables: prefer repo-root .env (search upward), fallback to local .env
+    env_path = _find_env_file(base_dir) or (base_dir / ".env")
+    dotenv_vars = _parse_dotenv(env_path)
     os_vars = {k: v for k, v in os.environ.items() if k.startswith("POSTGRES_")}
     merged_env = {**dotenv_vars, **os_vars}
     env_cfg = _env_to_config_keys(merged_env)

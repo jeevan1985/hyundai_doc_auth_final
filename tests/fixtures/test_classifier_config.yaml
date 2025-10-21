@@ -1,9 +1,0 @@
-
-model_name: "resnet18"
-weights_path: null
-device: "cpu"
-labels: ["real", "fake"]
-transforms:
-  image_size: 224
-  mean: [0.485, 0.456, 0.406]
-  std: [0.229, 0.224, 0.225]

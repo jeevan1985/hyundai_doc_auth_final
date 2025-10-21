@@ -39,7 +39,7 @@ feature_extractor:
 vector_database:
   # Purpose: Choose the similarity search provider.
   # Default if omitted: faiss
-  # Options: faiss (local index), qdrant (embedded/server), bruteforce (no index)
+  # Options: faiss (local index), bruteforce (no index)
   # Note: When privacy mode is enabled by defaults elsewhere, 'bruteforce' is disallowed.
   provider: faiss
 

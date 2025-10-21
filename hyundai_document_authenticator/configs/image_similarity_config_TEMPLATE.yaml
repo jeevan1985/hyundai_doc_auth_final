@@ -81,12 +81,11 @@ feature_extractor:
   feature_dimension: 1280
 
 # --------------------------------------------------------------------------------------
-# SECTION: VECTOR DATABASE (FAISS | Qdrant | Bruteforce providers)
+# SECTION: VECTOR DATABASE (FAISS | Bruteforce providers)
 # --------------------------------------------------------------------------------------
 vector_database:
   # [OPTIONAL] provider: select the vector database implementation. Default: faiss
   #   - faiss: local file-based index. Default and fully supported in TIF workflows.
-  #   - qdrant: use Qdrant vector database (embedded or server); see qdrant section below.
   #   - bruteforce: no index; direct scan of image DB folder during search.
   # NOTE: In privacy mode (search_task.privacy_mode=true), do NOT use 'bruteforce'.
   #       Bruteforce requires persisted crops on disk. The workflow will abort with a clear
@@ -94,7 +93,7 @@ vector_database:
   provider: faiss
 
   # [OPTIONAL] allow_fallback: if true, TIF search falls back to a brute-force search over
-  # the image DB folder when the FAISS or Qdrant index cannot be loaded or is empty. Default: true
+  # the image DB folder when the FAISS index cannot be loaded or is empty. Default: true
   allow_fallback: true
 
   # [OPTIONAL] fallback_choice: choose fallback behavior when allow_fallback is true and index load fails.
@@ -124,64 +123,12 @@ vector_database:
     index_type: flat   # options: flat | ivf | hnsw
 
     # IVF-specific parameters (used only when index_type: ivf)
-    # ----------------------------------------------------------------------------------
-    # How to set ivf_nlist (number of coarse clusters) in a sharded system
-    # - Training happens PER SHARD. Therefore size guidance should use the shard capacity,
-    #   not the total corpus size.
-    # - A common FAISS rule-of-thumb: nlist ∈ [4 * sqrt(N), 16 * sqrt(N)], N = vectors in the shard.
-    # - Pick a power of two near that range for efficient implementations.
-    #
-    # Worked example (default shard capacity)
-    # - total_indexes_per_file (legacy) or partition_capacity (preferred) = 250,000 items/shard
-    # - sqrt(250,000) ≈ 500 ⇒ recommended nlist ∈ [2,000..8,000]
-    # - Practical choice: 2,048 or 4,096 (start with 2,048; increase if recall suffers at target nprobe)
-    #
-    # Important
-    # - Each new IVF shard must be trained before adding; it requires at least ivf_nlist vectors
-    #   in the training batch. If your shard capacity or batch sizes are too small, training will fail.
-    # - If you want on-the-fly augmentation during search runs, IVF is only recommended when you can
-    #   provide adequate training vectors per shard; otherwise prefer FLAT or HNSW.
-    # - For production, set partition_capacity (preferred) or total_indexes_per_file to a realistic value
-    #   to avoid shards that are too small to train.
-    # [OPTIONAL] ivf_nlist: number of clusters during build (higher = more partitions). Default: 100
     ivf_nlist: 2048
-
-    # How to set ivf_nprobe_search (clusters probed at query time)
-    # - Larger nprobe improves recall but increases latency. Tune to meet your recall/SLO targets.
-    # - Good starting points: 32 for medium recall; 64–128 for higher recall; cap per your latency budget.
-    # - In sharded search, per-shard recall compounds. If results diverge from FLAT, consider increasing
-    #   ivf_nprobe_search and optionally over-requesting per-shard candidates before the global merge.
-    # [OPTIONAL] ivf_nprobe_search: clusters probed at query time (higher = better recall, slower). Default: 10
     ivf_nprobe_search: 32
 
     # HNSW-specific parameters (used only when index_type: hnsw)
-    # ----------------------------------------------------------------------------------
-    # hnsw_m — number of connections per node (build-time)
-    # - Analogy: number of highways leaving each city (vector). Higher m yields a denser,
-    #   more robust graph and typically better recall, at the cost of higher memory and
-    #   slower construction. Lower m reduces memory, may lower recall slightly.
-    # - Recommendation: 32 is a widely used, effective default. Consider 48–64 for very
-    #   high recall if memory allows.
-    # [OPTIONAL] hnsw_m: edges per node (higher = more memory + better accuracy). Default: 32
     hnsw_m: 32
-    #
-    # hnsw_ef_construction — construction quality (build-time)
-    # - Analogy: how many candidate neighbors are considered when deciding the best m
-    #   connections for a new node. Higher values improve graph quality and recall,
-    #   but increase build/insert time.
-    # - Recommendation: 40 is a good starting point; increase to 200–400 for higher
-    #   quality if insertion speed is acceptable.
-    # [OPTIONAL] hnsw_ef_construction: construction quality (higher = better graph, slower build). Default: 40
     hnsw_ef_construction: 40
-    #
-    # hnsw_efsearch_search — search thoroughness (query-time)
-    # - Analogy: how many paths are explored during search. Larger values increase recall
-    #   and query time; smaller values reduce latency but may miss best matches.
-    # - Recommendation: Start near 50; tune 64–200 based on your recall/latency target.
-    #   In sharded search, per-shard recall compounds, so consider slightly larger efsearch
-    #   and/or over-requesting per-shard candidates prior to the global top-k merge if
-    #   results diverge from FLAT.
-    # [OPTIONAL] hnsw_efsearch_search: query quality (higher = better recall, slower queries). Default: 32
     hnsw_efsearch_search: 50
 
     # [OPTIONAL] partition_capacity: provider-agnostic shard capacity.
@@ -192,7 +139,7 @@ vector_database:
     #   - "legacy"
     #   - "single"
     #   - "none"
-    # If both partition_capacity and legacy keys are provided, partition_capacity takes precedence.    
+    # If both partition_capacity and legacy keys are provided, partition_capacity takes precedence.
     # partition_capacity: 250000
 
     # [LEGACY] total_indexes_per_file: shard capacity per FAISS file pair.
@@ -204,71 +151,6 @@ vector_database:
     # A large value like 250,000 is efficient for production. The system will automatically
     # create and train new shards as this capacity is reached.
     total_indexes_per_file: 250000
-
-  # ==================================
-  # --- Qdrant Configuration ---
-  # ==================================
-  # Settings for the Qdrant vector database. Used only if provider is "qdrant".
-  qdrant:
-    # --- CHOOSE ONE STORAGE MODE ---
-    # Mode 1: On-Disk / Embedded Mode (for local or air-gapped systems).
-    # The database is a folder of files managed directly by your script. No separate server needed.
-    # To use this mode, provide a `location`. Default: instance/qdrant_db
-    location: "instance/qdrant_db"
-    # [RECOMMENDED-DEV] Use a per-run unique embedded location to avoid lock contention in local/dev runs.
-    # When true and 'location' is set, the effective path becomes <location>/<run_identifier>.
-    unique_location_per_run: true # Default: false
-    # location: ":memory:" # Use this for a temporary, in-memory database that is deleted when the script exits.
-
-    # Mode 2: Network / Server Mode.
-    # Your script connects to a separate, running Qdrant server (e.g., a Docker container).
-    # To use this mode, COMMENT OUT or REMOVE the `location` key above, and fill in the host/port below.
-    # Defaults: host=localhost, port=6333, grpc_port=6334, prefer_grpc=false
-    host: "localhost" # IP address of the Qdrant server  # Env override: QDRANT_HOST
-    port: 6333 # The REST API port of the Qdrant server  # Env override: QDRANT_PORT
-    grpc_port: 6334 # The gRPC port for faster communication  # Env override: QDRANT_GRPC_PORT
-    prefer_grpc: false # Set to true to use gRPC
-
-    # We will set the actual value from the .env file.
-    # [OPTIONAL] Default: ${QDRANT_API_KEY}
-    api_key: ${QDRANT_API_KEY} # This is a common convention for config files  # Env override: QDRANT_API_KEY
-    # [OPTIONAL] Default: false
-    https_enable: false # Enable or disable https based connection (default set to false)
-
-    # [OPTIONAL] The base name for the Qdrant "collection" (equivalent to a table). Default: image_similarity_collection
-    collection_name_stem: "image_similarity_collection"
-
-    # [OPTIONAL] How Qdrant measures vector similarity. Default: Cosine
-    # Options: "Cosine", "Dot", "Euclid"
-    distance_metric: "Cosine"
-
-    # [OPTIONAL] If true, enables quantization to reduce memory usage at a slight cost to accuracy. Default: false
-    enable_quantization: false
-
-    # [OPTIONAL] If true, persists the HNSW index to disk, allowing for faster startups. Default: true
-    on_disk_hnsw_indexing: true
-
-    # [OPTIONAL] If true, deletes the Qdrant collection and recreates it during index building. Default: false
-    # WARNING: This will delete all existing data in the collection.
-    force_recreate_collection: false
-
-    # [OPTIONAL] partition_capacity: provider-agnostic shard capacity.
-    # Defines the maximum number of points stored in a single Qdrant collection shard. When omitted,
-    # Qdrant defaults to 500000 points per collection. To explicitly disable sharding and use a single
-    # collection, set this key to one of:
-    #   - null
-    #   - "legacy"
-    #   - "single"
-    #   - "none"
-    # If both partition_capacity and legacy keys are provided, partition_capacity takes precedence.
-    partition_capacity: 500000
-
-    # [LEGACY] max_points_per_collection: capacity per collection.
-    # Retained for backward compatibility; prefer partition_capacity going forward.
-    # When set (integer N), uses collections named {collection_name_stem}_{model}_sNNNN
-    # and rolls over as capacity is reached. The legacy base collection (without suffix)
-    # is also included in discovery and search when present.
-    max_points_per_collection: 500000
 
 # --------------------------------------------------------------------------------------
 # SECTION: INDEXING TASK (TIFs → OCR pages → photo crops → FAISS index)
@@ -404,7 +286,7 @@ search_task:
   index_query_doc_images: false
 
   # Augmentation mode when index_query_doc_images is true.
-  # - persistent_query_index: Add batch embeddings to main corpus (FAISS/Qdrant).
+  # - persistent_query_index: Add batch embeddings to main corpus (FAISS).
   # - transient_query_index:  Keep batch embeddings in a per-run side index; do not modify main corpus.
   # Default: transient_query_index
   augmentation_mode: transient_query_index

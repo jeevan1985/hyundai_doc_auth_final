@@ -31,17 +31,17 @@ feature_extractor:
   feature_dimension: 1280
   # [OPTIONAL] Weights source (local path or model ID). Default: (none) — provide a compatible local path/ID for your environment
   # some models are like: models/efficientnet/efficientnet_b2_rwightman-bcdf34b7.pth,  models/efficientnet/efficientnet_b0_weights.pth, etc
-  pretrained_model_path_or_id: models/efficientnet/efficientnet_b0_weights.pth # models/efficientnet/efficientnet_b2_rwightman-bcdf34b7.pth # models/efficientnet/efficientnet_b0_weights.pth
+  pretrained_model_path_or_id: models/efficientnet/efficientnet_b0_weights.pth
   # [OPTIONAL] Inference device policy: auto|cuda|cpu. Default: "auto"
   device: auto
-  # [OPTIONAL] Verify and correct feature_dimension at runtime when mismatched. Default: true
+  # [OPTIONIONAL] Verify and correct feature_dimension at runtime when mismatched. Default: true
   enable_feature_dimension_fixing: true
 
-# Vector database configuration (FAISS | Qdrant | Bruteforce)
+# Vector database configuration (FAISS | Bruteforce)
 vector_database:
-  # [OPTIONAL] provider options: faiss | qdrant | bruteforce. Default: faiss
-  provider: faiss #qdrant #faiss #bruteforce  
-  # [OPTIONAL] Allow brute-force fallback if FAISS/Qdrant index is unavailable. Default: true
+  # [OPTIONAL] provider options: faiss | bruteforce. Default: faiss
+  provider: faiss
+  # [OPTIONAL] Allow brute-force fallback if FAISS index is unavailable. Default: true
   allow_fallback: true
   # [OPTIONAL] fallback_choice: choose fallback behavior when allow_fallback is true and index load fails.
   #   - transient: search only within the current batch (no base index) : default.
@@ -51,9 +51,6 @@ vector_database:
   # [OPTIONAL] build_index_on_load_failure: when true, automatically trigger index building if index loading fails.
   # Uses indexing_task.input_tif_folder_for_indexing (preferred) or indexing_task.image_folder_to_index). Default: false
   build_index_on_load_failure: true
-  # [OPTIONAL] fallback_choice: choose fallback behavior when allow_fallback is true and index load fails.
-  #   - transient: search only within the current batch (no base index) : default.
-  #   - bruteforce: search against the image DB folder using brute-force.
 
   faiss:
     # [OPTIONAL] Output directory for FAISS artifacts. Default: instance/faiss_indices
@@ -68,45 +65,13 @@ vector_database:
     hnsw_m: 32
     hnsw_ef_construction: 40
     hnsw_efsearch_search: 50
-    # [OPTIONAL] Unified partition capacity for both FAISS and Qdrant providers.
+    # [OPTIONAL] Unified partition capacity
     # For FAISS, this defines maximum items per shard file. Code default capacity when enabled: 250000. Use null/"legacy"/"single"/"none" to disable sharding.
     #partition_capacity: null
     # [LEGACY] Kept for backward compatibility until full migration.
     # Index file pattern: {filename_stem}_{model}_{index_type}_sNNNN.index
     # Mapping file pattern: {filename_stem}_{model}_{index_type}_sNNNN_mapping.pkl
-    total_indexes_per_file: 5 #null #5 #250000
-
-  # Qdrant Configuration (used only if provider == "qdrant")
-  qdrant:
-    # [OPTIONAL] On-disk embedded mode location (or ":memory:" for ephemeral). Default: "instance/qdrant_db"
-    location: "instance/qdrant_db"
-    # [RECOMMENDED-DEV] Use a per-run unique embedded location to avoid lock contention in local/dev runs.
-    # When true and 'location' is set, the effective path becomes <location>/<run_identifier>. Default: false
-    unique_location_per_run: false
-
-    # [OPTIONAL] Network/server mode connection details. Defaults: host=localhost, port=6333, grpc_port=6334, prefer_grpc=false
-    host: "localhost"  # Env override: QDRANT_HOST
-    port: 6333  # Env override: QDRANT_PORT
-    grpc_port: 6334  # Env override: QDRANT_GRPC_PORT
-    prefer_grpc: false
-
-    # [OPTIONAL] API key and TLS. Defaults: api_key=${QDRANT_API_KEY}, https_enable=false
-    api_key: ${QDRANT_API_KEY}  # Env override: QDRANT_API_KEY
-    https_enable: false
-
-    # [OPTIONAL] Collection and distance metric. Defaults: collection_name_stem="image_similarity_collection", distance_metric="Cosine"
-    collection_name_stem: "image_similarity_collection"
-    distance_metric: "Cosine"  # Cosine | Dot | Euclid
-    # [OPTIONAL] Quantization, on-disk HNSW, and force recreate. Defaults: enable_quantization=false, on_disk_hnsw_indexing=true, force_recreate_collection=false
-    enable_quantization: false
-    on_disk_hnsw_indexing: true
-    force_recreate_collection: false
-    # [OPTIONAL] Unified partition capacity for both FAISS and Qdrant providers.
-    # For Qdrant, this defines maximum points per collection shard. Use null/"legacy"/"single"/"none" to disable sharding.
-    partition_capacity: 500000
-    # [LEGACY] Kept for backward compatibility until full migration.
-    # When set to integer N, points are inserted into collections with suffix _sNNNN as capacity is reached.
-    max_points_per_collection: 500000
+    total_indexes_per_file: 5
 
 # Indexing from TIFs → extracted crops → FAISS index
 indexing_task:
@@ -180,10 +145,10 @@ search_task:
   index_query_doc_images: true
   # [OPTIONAL] Augmentation mode when index_query_doc_images is true. Default: transient_query_index
   # Augmentation mode when index_query_doc_images is true.
-  # - persistent_query_index: Add batch embeddings to main corpus (FAISS/Qdrant).
+  # - persistent_query_index: Add batch embeddings to main corpus (FAISS).
   # - transient_query_index:  Keep batch embeddings in a per-run side index; do not modify main corpus.
   # Default: transient_query_index
-  augmentation_mode: persistent_query_index #transient_query_index
+  augmentation_mode: persistent_query_index
   # [OPTIONAL] Privacy mode: forbid persisting crops to disk (bruteforce disallowed in privacy mode). Default: true
   privacy_mode: true
   # [OPTIONAL] Allow a query's parent to appear as a match  (self-match). 
