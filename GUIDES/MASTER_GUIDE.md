@@ -12,8 +12,6 @@
 > - **Prerequisite**: `mkdir -p appdata applog` (plus subfolders) is **mandatory** before any launch.
 > - **Backup/Restore**: Strictly operate on host paths (`tar`, `cp`, `rsync`). **Do not** use `docker volume` commands for data management.
 
-> Refactor Notice (2025-10): Data directory path normalized from `/appdat` to `/appdata`. Update any custom volume mounts, scripts, or environment variables accordingly. Only lowercase `appdat` forms were renamed; unrelated terms like `data` or `database` remain unchanged.
-
 ---
 
 <!-- ToC Sidebar: Renders in VS Code Preview, static HTML. Degrades gracefully on GitHub. -->
@@ -109,14 +107,6 @@
 | Operation | Command (Linux/macOS) | Command (Windows PowerShell) |
 | :--- | :--- | :--- |
 | **Prerequisites** | `mkdir -p appdata applog; mkdir -p appdata/postgres appdata/qdrant appdata/instance` | `mkdir appdata, applog, appdata/postgres, appdata/qdrant, appdata/instance` |
-
-> Developer tip: when building development images, pass your host UID/GID so bind-mounted files are writable by your user on the host. Example:
->
-> - Linux/macOS:
->   docker compose -f docker-compose.conda.yaml -f docker-compose.conda.dev.yaml build --build-arg UID=$(id -u) --build-arg GID=$(id -g)
->
-> - Windows PowerShell (WSL UID/GID or default values may apply):
->   docker compose -f docker-compose.conda.yaml -f docker-compose.conda.dev.yaml build --build-arg UID=1000 --build-arg GID=1000
 | **Start (CPU)** | `docker compose -f docker-compose.conda.yaml up -d --profile all` | `docker compose -f docker-compose.conda.yaml up -d --profile all` |
 | **Start (GPU)** | `docker compose -f docker-compose.gpu.conda.yaml up -d --profile all` | `docker compose -f docker-compose.gpu.conda.yaml up -d --profile all` |
 | **Stop System** | `docker compose -f docker-compose.conda.yaml down` | `docker compose -f docker-compose.conda.yaml down` |
@@ -125,7 +115,6 @@
 | **Backup Data** | `tar -czf backup.tar.gz ./appdata ./applog` | `Compress-Archive -Path ./appdata, ./applog -DestinationPath backup.zip` |
 | **Restore Data** | `tar -xzf backup.tar.gz` | `Expand-Archive -Path backup.zip -DestinationPath .` |
 | **DB Health Check**| `docker compose run --rm cli_runner cli python hyundai_document_authenticator/tool_database_tester.py ping` | `docker compose run --rm cli_runner cli python hyundai_document_authenticator/tool_database_tester.py ping` |
-| **Dev DB Security Note** | See Part 7 → “Development database exposure (dev-only)” | See Part 7 → “Development database exposure (dev-only)” |
 
 **Key Environment Variables (`.env` file)**:
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`: Internal PostgreSQL credentials.
@@ -546,12 +535,6 @@ python hyundai_document_authenticator/doc_image_verifier.py build-image-index \
   - The `appdata` and `applog` directories should be owned by the user running the Docker daemon.
   - On SELinux-enforced systems (like RHEL), the `:z` flag is appended to volume mounts (e.g., `./appdata:/data:z`) to allow the container to write to the host path. This is handled in `docker-compose.conda.dev.yaml` and should be added to production files if needed.
 
-### Development database exposure (dev-only)
-- The development override file maps PostgreSQL to the host at 5433:5432 for convenience. Exposing DB ports on the host increases attack surface. Prefer:
-  - `docker exec -it postgres_db_dev_service psql -U $POSTGRES_USER -d $POSTGRES_DB`
-  - Or connect your tooling to the internal Docker network without host port mapping.
-- Keep strong credentials in `.env` even in development environments. Consider disabling host port mapping on shared machines.
-
 ---
 
 <a id="toc-performance"></a>
@@ -658,7 +641,6 @@ CREATE TABLE public.doc_similarity_results (
 - **`global_top_docs`**: A JSON array of the top matching documents and their scores.
 
 ### 13.2. Qdrant Collections
-
 - Collection names are defined in `configs/image_similarity_config.yaml`.
 - By default, a collection named `hyundai_sim_search` might be created. It stores high-dimensional vectors for each extracted photo.
 

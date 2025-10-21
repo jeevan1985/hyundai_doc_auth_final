@@ -1,9 +1,0 @@
-# Dockerfile.dev-env
-# This Dockerfile creates a self-contained Conda environment for development.
-FROM continuumio/miniconda3:latest
-WORKDIR /workspace
-COPY environment.yml .
-RUN conda env create -f environment.yml && conda clean -afy
-# The default command will be a shell running inside the activated environment.
-# The environment name 'image-similarity-env' is taken from your environment.yml.
-ENTRYPOINT ["conda", "run", "-n", "image-similarity-env", "/bin/bash"]

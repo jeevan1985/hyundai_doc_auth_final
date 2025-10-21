@@ -1,120 +1,93 @@
 
-Use this prompt as-is to instruct an agent to generate minimal end-user configs for all remaining external modules.
+Below is a refined, professional prompt you can use later to implement the full refactoring safely and completely.
 
-Task
-Create minimal, end-user-friendly configuration files for every configuration YAML in D:\frm_git\hyundai_document_authenticator\hyundai_document_authenticator\external and all nested module directories. Do not modify any originals. For each original file, generate a new minimal file named with the _minimal suffix inserted before the file extension (e.g., foo.yaml -> foo_minimal.yaml).
+Title: Project Refactoring: Basic vs Professional Version Split (Upgrade-Safe Architecture)
 
-Scope and Targets
-- Root to scan: D:\frm_git\hyundai_document_authenticator\hyundai_document_authenticator\external
-- Include files:
-  - **/*.yaml
-  - **/*.yml
-  - Additionally check each module’s docs or README for referenced config file paths and include those if present.
-- Do not modify or delete any existing files.
+Role
+Act as a Senior Software Engineer and Codebase Refactoring Expert with strong experience in modular architecture, feature-flagging, dependency isolation, and upgrade-safe release strategies.
 
-Naming Convention
-- For each original config: <original_name>_minimal.yaml in the same directory as the original.
-- Do not overwrite the original.
-- Preserve the original file’s extension (.yaml vs .yml).
+Objective
+Prepare two variants of the project with a clean separation of concerns:
 
-Minimalization Rules
-- Keep only parameters essential to successful deployment and commonly tuned by end users:
-  - Input/output paths
-  - Provider selection and core feature toggles
-  - Device selection (auto/cuda/cpu)
-  - Basic batch sizes/concurrency where required for performance/memory
-  - Credentials as environment variable references (never embed secrets)
-  - Logging on/off toggle and one simple target path if strictly necessary
-- Remove advanced, developer-only, rarely changed, or fine-tuning parameters. When in doubt: omit and rely on code defaults.
-- For every parameter you include, add a short plain-language comment that states:
-  - Purpose of the parameter
-  - Hardcoded default if omitted (what the code falls back to)
-  - Allowed options or typical value ranges
-- Defaults and safety posture:
-  - Prefer safe, privacy-first defaults (e.g., privacy_mode: true where applicable)
-  - Disable DB writes by default unless the module requires DB to function (e.g., save_results_to_postgresql: false)
-  - Avoid destructive actions by default (e.g., force_recreate=false, force_rebuild=false)
-  - Prefer local/embedded providers (e.g., faiss, embedded SQLite) where applicable
-  - Use environment variables for credentials (e.g., ${POSTGRES_USER}, ${API_KEY}) and reference .env.example
+1) Basic Version (this task)
+- Excludes all professional-tier features such as risk scoring, Qdrant indexing, and any advanced analytics.
+- Must run independently with core/basic functionality intact and fully tested.
 
-Content and Structure Guidelines
-- Keep files concise and logically grouped. Use YAML best practices.
-- Place a brief header comment explaining:
-  - Purpose
-  - How paths are resolved (relative to file)
-  - One-paragraph quick-start: which 2–3 values a user most likely needs to change
-- For each module, cover only the minimal subset needed to run the typical workflow of that module. Examples of typical essentials:
-  - image_authenticity_classifier: on/off toggle; path to classifier config; class names; device selection
-  - key_input: input mode; API endpoint or staging directory; auth token via ${ENV}; batch size/limits if required
-  - photo_extractor: extraction mode (bbox/yolo); model path if yolo; bbox list if bbox; device selection; basic thresholds
-  - tif_searcher: OCR backend; language; minimal paddles settings; search text; device toggle; privacy toggle if any
-  - result_gui: port; host binding; minimal auth toggle; static root; DB/file storage switches
-- Parameter comments must be clear and accurate. If a default is dynamic or “depends on X,” say so explicitly.
+2) Professional Version (future)
+- Includes risk scoring, Qdrant indexing, and other advanced capabilities.
+- Re-enabled simply by restoring the professional modules/files to the Basic Version without any additional code changes or configuration edits.
 
-Functional Requirements
-- Each minimal config must be immediately usable for a standard deployment scenario with no further changes beyond obvious local path adjustments.
-- Use safe defaults that do not require network access unless the module fundamentally needs it.
-- Where credentials or sensitive settings are required, reference environment variables and never include actual secrets.
+Project Context
+- Repository root: D:\frm_git\hyundai_doc_auth_final
+- Target subsystem: hyundai_document_authenticator\core_engine\image_similarity_system\
+- Examples of professional-only modules currently present:
+  - qdrant_manager.py
+  - risk_scoring.py
+  - Any related advanced vector indexing, advanced ranking, or non-fallback scoring modules
+- Examples of baseline/fallback modules that must remain:
+  - risk_scoring_fallback.py
+  - Any lightweight or minimal alternatives required for basic functionality
 
-Process
-1) Discover configs: recursively list all *.yaml and *.yml in external/. Also scan module docs for config names referenced.
-2) For each config:
-   - Open and review the file and related code to infer default behavior and required keys.
-   - Create the new _minimal file with concise sections and minimal keys.
-   - Annotate every kept parameter with comments: purpose, fallback default, allowed values.
-   - Use relative paths (relative to the config file location) where possible.
-3) Validate:
-   - Ensure each YAML is syntactically valid and loads (no tabs, consistent indentation).
-   - No original files are overwritten.
-4) Report:
-   - Provide a Change Report (see below) summarizing the created minimal files, and list any files for which a minimal version could not be generated, with reasons.
+Strict Requirements
+1) Analyze and Identify
+- Enumerate all modules, imports, and code paths that implement professional features (e.g., Qdrant vector DB, advanced similarity/risk scoring).
+- Enumerate all fallback or baseline components required to keep the Basic Version fully functional.
+- Document explicit import relationships so it’s clear which modules are optional (professional) vs required (basic).
 
-Safety and Defaults Policy
-- Disable any data-destroying options by default.
-- Disable network or DB writes by default unless mandatory to function.
-- Avoid enabling privacy-sensitive outputs by default; document how to enable.
-- Log minimally by default; no noisy debug logs.
+2) Remove or Disable Professional Features
+- Safely remove or disable professional-only files and code paths from the Basic Version.
+- Eliminate any runtime imports, indirect dependencies, or configuration entries that would attempt to load professional-only features when absent.
+- Ensure the Basic Version runs cleanly with zero import or runtime errors.
 
-Execution Environment Awareness
-- OS: Windows/Linux
-- If running any scripts for discovery or validation:
-  - Create a temporary .py file and execute with python (not inline -c).
-  - Ensure cross-platform considerations are documented if any script is retained.
+3) Preserve Upgrade Compatibility
+- Architect imports and feature detection so that simply adding back the removed professional modules (e.g., qdrant_manager.py, risk_scoring.py) will immediately re-enable those features with no code or config edits.
+- Use clear extension points and optional imports (e.g., try/except imports or registry-based providers) so restored files plug in automatically.
+- Do not modify shared abstractions, base classes, or public interfaces required by both variants.
+
+4) Maintain Code Integrity and Standards
+- Do not alter shared logic or cross-tier configuration schemas unless absolutely necessary for correctness.
+- Keep fallback behavior (e.g., risk_scoring_fallback.py) intact and used by default in the Basic Version.
+- Ensure testability remains strong; update or create tests that validate Basic Version behavior without professional modules present.
 
 Deliverables
-- One minimal YAML per discovered config, saved as <original>_minimal.yaml alongside the original.
-- Each minimal file includes:
-  - Header comment (purpose; path resolution; quick-start)
-  - Only essential keys with comments for purpose, fallback default, allowed values
-  - Safe defaults that work out-of-the-box for a typical local deployment
+- Updated project codebase prepared for Basic Version deployment, with professional features cleanly removed or disabled.
+- A concise Change Report that includes:
+  - Summary of professional-only modules, imports, and code paths removed/disabled.
+  - List of fallback/baseline mechanisms retained and how they’re wired in.
+  - Verification steps (commands/scripts) to run the Basic Version end-to-end.
+  - Confirmation and instructions that re-adding the professional modules restores full professional functionality with no further edits.
 
-Response Behavior Rules
-- Do not paste full YAMLs in chat if you can write files directly.
-- Provide a final Change Report.
+Non-Functional Expectations
+- Reliability: Basic Version must run without professional dependencies installed.
+- Maintainability: Clear separation of optional features using well-defined interfaces (e.g., provider pattern, registry, or plug-in architecture).
+- Upgrade-Safe: No edits needed when restoring professional modules.
+- Documentation: Update or create a README/UPGRADE.md explaining how Basic vs Professional variants are structured and how to restore professional features.
 
-Change Report Format
-- Status: “All requested changes applied” or “Some changes could not be applied”
-- Details: List of files created with paths
-- Missing / Not Possible: Which files could not be handled and why
-- (Optional) Additional Recommendations: Short list of improvements or risks noted
+Execution Environment Awareness
+- Be OS-aware for commands and scripts:
+  - Windows CMD: use python and backslashes
+  - Windows PowerShell: use python and backslashes
+  - Linux/macOS Bash: use python3 and forward slashes
+- When executing scripts:
+  - Generate a temporary .py file; do not use python -c inline
+- Prefer cross-platform commands; if platform-specific behavior is required, call it out in the Change Report.
+
+Code Quality Standards
+- Docstrings: Use PEP 257 Google-style docstrings on modules/classes/functions with Args, Returns, Raises.
+- Type Hints: Full and precise type hints via Python typing.
+- Style: Follow PEP 8; keep code clean, readable, and idiomatic.
+- Comments: Only for non-obvious logic; explain the “why.”
+
+Response Behavior
+- Provide a Change Report only (no full code in chat if you can edit files directly).
+- Change Report format:
+  - Status: summary of completion
+  - Details: what changed
+  - Missing / Not Possible: explain once
+  - Optional Recommendations: architectural or maintainability suggestions
+- Pause after delivering the Change Report and await confirmation before further steps.
 
 Acceptance Criteria
-- All discovered configs in external/ have corresponding _minimal files next to them.
-- Minimal files are concise, valid YAML, and reflect safe, production-friendly defaults.
-- No original files are modified.
-- Every included parameter has clear comments including purpose, fallback default, and options.
-
-Additional Recommendations for the Agent to Include
-- Create/update a consolidated .env.example to include any newly referenced variables across modules (API keys, DB creds, endpoints).
-- Propose a lightweight schema validation approach (e.g., pydantic or jsonschema) to enforce compatible combinations (e.g., bruteforce disabled when privacy is true).
-- Standardize provider defaults across modules (e.g., device=auto, logging minimal).
-- Identify duplicate or inconsistent defaults across configs and suggest harmonization.
-- Provide a minimal “quick start” in each module’s README pointing to the new *_minimal.yaml file and the 2–3 values a user should set (paths, model weights, endpoint).
-- If a module strongly depends on another module’s config, note it at the top of the minimal file under “Dependencies” and link the path.
-
-My Persona and Code Standards (apply if you create any helper code/scripts)
-- Persona: Senior Principal Software Engineer and Code Quality Architect.
-- Docstrings: Google-style, PEP 257 compliant.
-- Type Hints: Full typing for functions and variables.
-- Professionalism & Readability: PEP 8, idiomatic constructs.
-- Commenting: Only explain non-obvious logic and the “why,” not the “what.”
+- Basic Version runs fully without professional features present.
+- Re-adding the removed modules immediately reinstates professional features.
+- No additional code changes or configuration edits are required to upgrade from Basic to Professional.
