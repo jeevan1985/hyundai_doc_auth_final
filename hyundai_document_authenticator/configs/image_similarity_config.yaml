@@ -38,6 +38,27 @@ vector_database:
   # Options: faiss (local index), bruteforce (no index)
   # Note: When privacy mode is enabled by defaults elsewhere, 'bruteforce' is disallowed.
   provider: faiss
+  # Allow fallback and choose strategy when base index is unavailable.
+  allow_fallback: true
+  fallback_choice: transient
+  # Set to true if you want the system to build the index automatically when load fails.
+  build_index_on_load_failure: false
+
+  # FAISS settings
+  faiss:
+    # Required to avoid NoneType error during FAISS initialization
+    output_directory: instance/faiss_indices
+    # Keep earlier choices for artifact naming and index type
+    filename_stem: faiss_collection
+    index_type: flat
+    # Optional params (effective only for matching index types)
+    ivf_nlist: 1024
+    ivf_nprobe_search: 32
+    hnsw_m: 32
+    hnsw_ef_construction: 40
+    hnsw_efsearch_search: 50
+    # Sharding (optional): use integer to enable per-file capacity, or omit to keep single-file mode
+    # total_indexes_per_file: 5
 
 # --------------------------------------------------------------------------------------
 # INDEXING TASK (build the searchable database from TIFs)

@@ -1,0 +1,55 @@
+{
+  "global": {
+    "aggregation_strategy_used": "max",
+    "top_k_used": 5,
+    "top_doc_used": 7,
+    "fallback_to_bruteforce_message": null,
+    "indexed_image_count": 78,
+    "index_path": "FAISS sharded index: 2 shards (first: D:\\frm_git\\hyundai_doc_auth_final\\hyundai_document_authenticator\\instance\\faiss_indices\\faiss_collection_efficientnet_flat_s0001.index)",
+    "photo_authenticity_enabled": false,
+    "similar_doc_flag_threshold": 0.8,
+    "non_authentic_image_classes": []
+  },
+  "per_query": [
+    {
+      "query_document": "N2024080100057THA00100001_12.tif",
+      "matched_query_document": "N2024080100057THA00100001_12.tif",
+      "num_query_photos": 2,
+      "top_docs": [
+        {
+          "document": "N2024080100057THA00100001_12_page1_photo1",
+          "score": 0.9999999999996655
+        },
+        {
+          "document": "N2024080100057THA00100001_12_page1_photo0",
+          "score": 0.9999999999994762
+        },
+        {
+          "document": "N2024080100108THA00100001_12_page1_photo1",
+          "score": 0.9313550814986229
+        },
+        {
+          "document": "N2024090300102THA00100001_12_page1_photo0",
+          "score": 0.4901841878890991
+        },
+        {
+          "document": "N2024122600226THA00100001_12_page1_photo0",
+          "score": 0.4531187415122986
+        },
+        {
+          "document": "N2024082901350THA00100001_12_page1_photo0",
+          "score": 0.43907439708709717
+        },
+        {
+          "document": "N2024111801387THA00100001_12_page1_photo1",
+          "score": 0.42413008213043213
+        }
+      ],
+      "elapsed_seconds": 0.8015449999948032,
+      "top_k_used": 5,
+      "top_doc_used": 7,
+      "aggregation_strategy_used": "max",
+      "key_metadata": null
+    }
+  ]
+}
