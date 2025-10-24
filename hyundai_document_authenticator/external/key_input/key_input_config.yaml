@@ -1,331 +1,74 @@
-# Key-driven TIF pipeline configuration (production-ready example)
+# Key Input Orchestrator — Minimal Config
 #
-# Purpose
-# - Drive the TIF similarity pipeline from a key table (CSV/Excel/JSON) that lists document file names
-# - Resolve files from local folders or fetch them from an external API
-# - Preserve existing pipeline behavior; only active when image_similarity_config.yaml sets input_mode.doc_input_start: "key"
+# Purpose: Drive the pipeline using a key table (CSV/Excel/JSON) of filenames.
+# Path resolution: Relative paths are resolved relative to THIS file.
+# Quick start:
+#   1) Set key_input.input_table_path to your CSV/Excel file.
+#   2) Choose data_source.mode: local or api.
+#   3) If local: set local.search_roots.
+#      If api: set api.api_endpoint and use env for Authorization.
 #
-# Notes
-# - This configuration file is read by Python; environment variables like ${VAR} are NOT expanded automatically.
-#   Put real values in here, or implement/env-substitution in your application code before loading this file.
-# - For very large Excel key files, prefer CSV for true streaming.
+# Safe defaults:
+#   - Minimal logging and no destructive operations.
+#   - Network access disabled unless mode=api.
+#   - Credentials should come from environment variables.
 
-# ==============================================================================
-# Logging
-# ==============================================================================
 logging:
-  # [OPTIONAL] When true, backup old log files by writing '<name>.bk' before deletion.
-  # Default (hardcoded): false
+  # Purpose: Housekeeping for old logs.
+  # Default if omitted: backup_logs=false, remove_logs_days=7.
+  # Allowed: booleans and positive integers.
   backup_logs: false
-  # [OPTIONAL] Remove log files older than this many days.
-  # Default (hardcoded): 7
   remove_logs_days: 7
 
-# ==============================================================================
-# Key table input settings
-# ==============================================================================
 key_input:
-  # REQUIRED: Path to the key table containing the filenames to process.
-  # Supports CSV, Excel (.xlsx/.xls), JSON array, or NDJSON (.jsonl/.ndjson).
-  # Default: (no default; REQUIRED)
-  input_table_path: "./mock_api_TEST/filtered_rows.xlsx"
+  # Path to the key table listing filenames to process.
+  # Default if omitted: REQUIRED; the code expects a valid path.
+  # Formats: .csv, .xlsx/.xls, .json, .jsonl
+  input_table_path: ../../mock_api_TEST/filtered_rows.xlsx
 
-  # [OPTIONAL] Column name in the key table that contains the document file names.
-  # (this column will be used for local resolution or passed to API, with optional name-mapping).
-  # Tells the loader which column in your Excel/CSV/JSON contains the filename key to iterate.
-  # Default: "파일명"
+  # Column in the key table containing the filename.
+  # Default if omitted: "파일명".
+  # Allowed: any existing column name in your table.
   file_name_column: "파일명"
 
-  # [OPTIONAL] One of: csv | excel | json | auto (auto infers from file extension).
-  # Default: "auto"
-  format: "auto"
+  # Batch size passed into the workflow; reduce if memory is limited.
+  # Default if omitted: 200 in code; here we set a conservative value.
+  # Allowed: positive integer.
+  batch_size: 200
 
-  # [OPTIONAL] Excel → CSV streaming: if true and the input is Excel, convert to a temp CSV and stream from it.
-  # This reduces memory usage for large spreadsheets.
-  # Default: true
-  key_in_xlsx_to_csv: true
-  # [OPTIONAL] Select a sheet by index (0-based) or name. Examples:
-  # excel_sheet_name: 0
-  # excel_sheet_name: "Sheet1"
-  # Default: null (active sheet)
-  excel_sheet_name: null
-
-  # [OPTIONAL] JSON handling
-  # If the JSON top-level is an object, extract an array from this field. If null, expects a top-level array (or NDJSON if json_records_is_lines=true).
-  # Default: null
-  json_array_field: null
-  # [OPTIONAL] Set to true for line-delimited JSON records (.jsonl/.ndjson)
-  # Default: false
-  json_records_is_lines: false
-
-  # [OPTIONAL] Large-scale streaming and cleaning options
-  # batch_size: number of keys to process per batch passed into the workflow.
-  # Default: 200
-  batch_size: 1500
-  # [OPTIONAL] Deduplicate filenames in-memory.
-  # Default: true
-  deduplicate: false
-  # [OPTIONAL] Strip whitespace on filename column.
-  # Default: true
-  strip_whitespace: true
-  # [OPTIONAL] Case-insensitive filename resolution (local mode).
-  # Default: true
-  case_insensitive_match: true
-
-  # [OPTIONAL] After all rows are processed, either backup or delete the processed key table file.
-  # When true: rename the file by appending ".bkup" after the extension (e.g., filtered_rows.xlsx.bkup)
-  # When false: delete the file.
-  # When anything else other than 'true' or 'false' it will keep the key table file as it is (good for debugging)
-  # Note: Only a single lightweight summary line is appended to external/key_input/logs/key_table_logs.log per run.
-  # Default: true
-  backup_processed_input_table: none #true
-
-  # [OPTIONAL] Columns from the key table to propagate into results for reporting/traceability.
-  # Note: Only keep columns you absolutely need; fewer columns means less per-batch overhead.
-  # Default: null (no enrichment columns)
-  columns_for_results:
-    - "사업자등록번호"
-    - "수신일자"
-    - "업종명"
-
-  # [OPTIONAL] Disk-backed key index to avoid loading entire table in memory and enable reuse across runs.
-  # When enabled, the orchestrator builds a SQLite index with filename-based keys and the minimal set of
-  # required columns (see below). Runtime lookups occur against the DB, keeping memory stable for very
-  # large key tables (millions of rows). Behavior remains unchanged when enabled=false.
-  disk_backed_index:
-    # [OPTIONAL] Master switch; when false, behavior remains identical to legacy in-memory path.
-    # Default: false
-    enabled: true
-    # [OPTIONAL] Reserved for future options (e.g., lmdb)
-    # Default: "sqlite"
-    backend: sqlite
-    # [OPTIONAL] Whether to persist the DB across runs. When false, a new temp DB is created per run and deleted after.
-    # Default: true
-    persist_disk_backed_index: true
-    # [OPTIONAL] Rows per transaction during index build; tune for throughput vs. WAL file growth.
-    # Default: 10000
-    index_chunk_size: 10000
-    # [OPTIONAL] When true, persist the full original row as JSON in 'row_json' for debugging/forensics.
-    # Default: false
-    store_all_columns: false
-    # [OPTIONAL] If true, also store normalized_key=lower(filename) and use it for lookups; prevents case issues.
-    # Default: true
-    case_insensitive_keys: true
-    rebuild_policy:
-      # [OPTIONAL] Rebuild the index if the required columns/types or file_name_column/case_insensitive_keys change.
-      # Default: true
-      on_schema_change: true
-      # [OPTIONAL] Detect source changes by: "mtime_only" | "mtime_hash" | "never". mtime_hash is safest (streams file to hash).
-      # Default: "mtime_hash"
-      on_source_change: "mtime_hash"
-      # [OPTIONAL] Force a rebuild regardless of checks.
-      # Default: false
-      force_rebuild: true
-    sqlite:
-      # [OPTIONAL] Path to the SQLite DB file (relative to repo root unless absolute).
-      # If omitted, default resolves to: instance/query_key_index/key_table_index.sqlite
-      # or <search_task.query_embed_index.output_path_query_embed_index>/key_table_index.sqlite when set globally.
-      # Default: "instance/query_key_index/key_table_index.sqlite"
-      db_path: "instance/query_key_index/key_table_index.sqlite"
-      # [OPTIONAL] Table names used for data and metadata.
-      # Default: "key_index"
-      table_name: "key_index"
-      # Default: "key_index_meta"
-      metadata_table: "key_index_meta"
-      # [OPTIONAL] PRAGMA settings for durability/performance. WAL + NORMAL is a good production default.
-      # Default: journal_mode: "WAL", synchronous: "NORMAL"
-      # Code default: WAL
-      journal_mode: "WAL"
-      # Code default: NORMAL
-      synchronous: "NORMAL"
-      # [OPTIONAL] Create STRICT table when available (SQLite 3.37+). Safe to leave false if unsure.
-      # Default: false
-      strict_mode: false
-      # [OPTIONAL] Default affinity for stored columns when type is not specified below.
-      # Default: "TEXT"
-      default_type: "TEXT"
-      # [OPTIONAL] Per-column type hints; influences schema and default outbound casting.
-      # Examples:
-      #   "파일명": "TEXT"
-      #   "사업자등록번호": "TEXT"
-      #   "수신일자": "DATETIME"
-      #   "업종명": "TEXT"
-      #   "file_id": "INTEGER"
-      #   "amount": "REAL"
-      # Default: {}
-      column_types: {}
-      # [OPTIONAL] Per-column ingestion casting; normalizes values before insert.
-      # Examples:
-      #   "수신일자": { mode: "date_to_iso", input_format: "%Y-%m-%d" }
-      #   "file_id": { mode: "int" }
-      #   "amount": { mode: "float" }
-      # Default: {}
-      casting: {}
-      # [OPTIONAL] Casting error policy during ingestion: store_text | store_null | raise
-      # Default: "store_text"
-      on_cast_error: "store_text"
-      # [OPTIONAL] Global default for date-like values when not overridden by request-time param_cast.
-      # Supported: "iso_text" (ISO-8601)
-      # Default: "iso_text"
-      date_policy: "iso_text"
-
-# ==============================================================================
-# [OPTIONAL] Name mapping (to adapt to storage naming conventions)
-# Example:
-#   원본:  N2023100401437THA00001
-#   규칙:  prefix=file_name[:-5], suffix=file_name[-5:], mapped_core=f"{prefix}001{suffix}", pattern: "{mapped_core}_*.tif"
-# Configure values below to reproduce the mapping logic in both local search and database LIKE queries.
-# Defaults: enabled=true, debug_log=false, tail_len=5, insert_token="001", glob_suffix="_*.tif",
-#           use_rglob_any_depth=true, db_like_template="{prefix}{insert}{suffix}_%.tif"
-# ==============================================================================
-name_mapping:
-  enabled: true
-  # [OPTIONAL] Purpose and scope:
-  # - Controls how filenames are transformed for LOCAL and DATABASE resolution (filesystem/DB search).
-  # - API payloads are unaffected unless data_source.api.request_mapping.send_mapped_filename=true.
-  #   When that flag is true, this same mapping (tail_len + insert_token) is used to compute the
-  #   value sent to the API; otherwise the original filename is sent.
-  # - glob_suffix and use_rglob_any_depth affect ONLY local filesystem searching patterns; they do not
-  #   change values sent to APIs.
-  # Behavior notes:
-  # - If enabled=false, mapping is not applied to local/db search. If send_mapped_filename=true but mapping
-  #   is disabled or cannot be derived (filename shorter than tail_len), the client falls back to original.
-  # Field glossary:
-  # - tail_len: number of characters taken from the end of the original filename as the suffix. (Default: 5)
-  # - insert_token: token inserted between prefix and suffix to form the mapped core. (Default: "001")
-  # - glob_suffix: wildcard(s) appended after the mapped core when scanning files locally (Default: "_*.tif").
-  # - use_rglob_any_depth: if true, search recursively under configured roots. (Default: true)
-  # - db_like_template: pattern used when building SQL LIKE queries in database mode. (Default: "{prefix}{insert}{suffix}_%.tif")
-  debug_log: false
-  tail_len: 5
-  insert_token: "001"
-  glob_suffix: "_*.tif"
-  use_rglob_any_depth: true
-  db_like_template: "{prefix}{insert}{suffix}_%.tif"
-
-# ==============================================================================
-# Data source selection:
-# - local: resolve filenames under folders
-# - api:   fetch TIFs via HTTP API using data from the key table
-# ==============================================================================
+# Data source selection: resolve files locally or fetch via API.
 data_source:
-  # [OPTIONAL] Select the active mode: api | local
-  # Default: api
-  mode: api
+  # Purpose: Choose how to get TIFs.
+  # Default if omitted: api (code default). Safer local default here.
+  # Allowed: local | api
+  mode: local
 
-  # [OPTIONAL] Knobs specific to 'key' mode behavior
-  key_mode:
-    # [OPTIONAL] When true, if you trigger indexing in the same process, the orchestrator will set
-    # indexing_task.input_tif_folder_for_indexing in image_similarity_config.yaml 
-    # to use the temporary batch folder (queries).
-    # This enables an API→temp→index pattern without persisting the downloads.
-    # Default: false
-    use_tmp_for_indexing_input: false
-
-  # ---------- Local mode configuration ----------
   local:
-    # [OPTIONAL] One or more folders where TIF files reside
-    # Default: [] (no roots)
+    # Folders to search for files; recursive search is used by default in code.
+    # Default if omitted: [] (no roots).
+    # Allowed: list of existing directories.
     search_roots:
-      - "./mock_api_TEST/mock_api_server_images"
-      #- "data_real"
+      - ../../mock_api_TEST/mock_api_server_images
 
-    # [OPTIONAL] Whether to search recursively under search_roots
-    # Default: true
-    recursive: true
-
-    # [OPTIONAL] File type constraints
-    # Default: [".tif", ".tiff"]
-    allowed_extensions: [".tif", ".tiff"]
-
-    # [OPTIONAL] If the filename in the key table is missing an extension, try allowed extensions
-    # Default: true
-    resolve_without_extension: true
-
-    # [OPTIONAL] Stop after the first match when multiple are found
-    # Default: true
-    stop_on_first_match: true
-
-  # ---------- API mode configuration ----------
   api:
-    # The API endpoint to retrieve images for a given filename and metadata.
-    # Default: (no default; REQUIRED when mode: api)
+    # API endpoint to retrieve images for a given filename and metadata.
+    # Default if omitted and mode=api: REQUIRED.
     api_endpoint: "http://127.0.0.1:5001/images"
 
-    # [OPTIONAL] HTTP method (GET | POST)
-    # Default: "POST"
-    http_method: "POST"
-
-    # [OPTIONAL] Headers for the request (e.g., Authorization).
-    # Note: The client will not expand ${ENV} placeholders; put real values or implement substitution.
-    # Default: {}
+    # HTTP headers; provide credentials via environment variables.
+    # Example: Authorization: "Bearer ${IMAGE_SIM_API_KEY}"
+    # Default if omitted: {}
     headers:
-      Authorization: "Bearer REPLACE_WITH_TOKEN"  # Env override recommended: IMAGE_SIM_API_KEY (e.g., "Bearer ${IMAGE_SIM_API_KEY}")
+      Authorization: "Bearer ${IMAGE_SIM_API_KEY}"
       Content-Type: "application/json"
 
-    # [OPTIONAL] Timeout and retry controls
-    # Default: timeout_seconds=30, retry.max_retries=3, retry.backoff_seconds=2
-    timeout_seconds: 30
-    retry:
-      max_retries: 3
-      backoff_seconds: 2
-
-    # [OPTIONAL] Concurrency for outbound requests
-    # Default: 4
-    max_concurrency: 12
-
+    # Map the filename column to the API parameter expected by the server.
+    # Default if omitted: you must set either api_filename_param or param_map.
     request_mapping:
-      # Filename parameter mapping (choose ONE):
-      # Option A (explicit): set api_filename_param to the API parameter that will carry the filename value.
-      # Option B (via param_map): include the filename column from the key table in param_map. Example:
-      #   "<file_name_column>": "<api_param_name>"
-      #   If the API expects the same parameter name as the column (e.g., '파일명'), map to itself:
-      #   "파일명": "filename" ## if the api_param_name is different to 'filename' in api, use other
-      # One of Option A or Option B is required when mode=api.
-      # Default: api_filename_param=null (use param_map instead)
-      # api_filename_param: "filename"
-
-      # [OPTIONAL] If true, send mapped filename to API instead of the original (client-side mapping).
-      # Default: false
-      send_mapped_filename: false
-
-      # [OPTIONAL] Map additional key table columns to API parameter names.
-      # DIRECTION: "<key_table_column_name>": "<api_param_name>"
-      # Default: {}
       param_map:
-        '파일명': "filename"
-        "사업자등록번호": "사업자등록번호"
-        "수신일자": "수신일자"
-        "업종명": "업종명"
+        "파일명": "filename"
 
-      # [OPTIONAL] Per-parameter outbound casting (overrides sqlite.column_types defaults when disk index is enabled).
-      # The mapping is keyed by the API parameter name (values on the right-hand side of param_map).
-      # Types: string | int | float | bool | datetime
-      # Default: {}
-      # param_cast:
-      #   filename: { type: "string" }
-
-    response_mapping:
-      # How the server returns the image content for each request.
-      # Choose exactly ONE mode that matches the real API contract:
-      #   - base64: The server responds with JSON that includes a base64 string of the image.
-      #   - url:    The server responds with JSON that includes a direct URL to download the image.
-      #   - binary: The server returns the raw image bytes as the HTTP response body (no JSON wrapper),
-      #              or a JSON field that carries base64-encoded binary.
-      # Default: image_payload_type="base64", image_field="image_b64", url_field="image_url", binary_field="image_bytes",
-      #          file_name_field=null
-      image_payload_type: "base64"
-      image_field: "image_b64"
-      url_field: "image_url"
-      binary_field: "image_bytes"
-      file_name_field: "server_filename"
-
-    # [OPTIONAL] Persistence and security controls for API downloads
-    # - persist_downloads: if true, keep saved files under api_output_save_path for audit/reuse.
-    #   if false (default), save to a transient temp folder and delete after the workflow run finishes.
-    # - transient_download_root: optional base directory for transient folders.
-    # - api_output_save_path: folder for persistent downloads when persist_downloads=true.
-    # Default: persist_downloads=false, transient_download_root=null, api_output_save_path="./api_fetched_images"
-    api_output_save_path: "D:/frm_git/hyundai_document_authenticator/instance/api_downloads"
+    # Save policy for API downloads; prefer transient storage by default.
+    # Default if omitted: persist_downloads=false.
     persist_downloads: false
-    transient_download_root: null
+    api_output_save_path: ../../instance/api_downloads

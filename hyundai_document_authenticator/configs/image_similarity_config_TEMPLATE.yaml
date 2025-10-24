@@ -1,581 +1,134 @@
-# ======================================================================================
-# TIF Document Similarity - Configuration Template (Client-Focused, TIF-Only)
-# ======================================================================================
-# HOW TO USE THIS FILE
-# 1) Copy this file to 'image_similarity_config.yaml' in the same folder.
-# 2) Adjust paths and values for your environment (see detailed comments below).
-# 3) All relative paths in this file are resolved relative to the location of this
-#    configuration file (not your current working directory).
-# 4) This template configures ONLY TIF document similarity workflows: building an
-#    image index from TIFs and running TIF batch searches from a folder.
-# ======================================================================================
+# Minimal Production Configuration Template for TIF Document Similarity
+# Purpose: A concise, end-user-friendly template with safe defaults and clear comments.
+# Notes:
+# - Only essential, commonly tuned settings are included. All others fall back to code defaults.
+# - Paths are relative to this file’s directory unless otherwise noted.
 
 # --------------------------------------------------------------------------------------
-# SECTION: INPUT MODE (TIF ingestion mechanism)
+# INPUT MODE (how TIFs are provided to the pipeline)
 # --------------------------------------------------------------------------------------
 input_mode:
-  # [OPTIONAL] doc_input_start: controls how TIFs are fed into the pipeline. Default: "key"
-  #   - "tif": Standard folder-based mode. The workflows read TIFs directly from
-  #             indexing_task.input_tif_folder_for_indexing (build) and
-  #             search_task.input_tif_folder_for_search (search). The CLI --folder
-  #             option overrides these values at runtime.
-  #   - "key": Optional. Uses an external key-input orchestrator to stage a per-batch
-  #             temporary folder containing TIFs, then calls the TIF workflows with
-  #             that staged folder. Configure external/key_input/key_input_config.yaml
-  #             if your deployment needs this mode.
-  #   Allowed values: {tif, key}. Any other value is logged and falls back to 'key'.
-  doc_input_start: key   # options: tif | key
+  # Purpose: Select the ingestion mechanism.
+  # Default if omitted: "key" (uses external key-input orchestrator)
+  # Options: {tif, key}
+  # Recommendation: Use "tif" for simple folder-based runs (no external services needed).
+  doc_input_start: tif
 
 # --------------------------------------------------------------------------------------
-# SECTION: APPLICATION LOGGING (global)
-# --------------------------------------------------------------------------------------
-logging:
-  # [OPTIONAL] Toggle append-only JSONL logging for failed key-driven API filename requests. Default: true
-  # When true, failures detected in key-driven API mode are appended to
-  # hyundai_document_authenticator/logs/failed_requests.log.
-  enable_failed_key_request_logging: true
-  # [OPTIONAL] Log maintenance (per-module). Controls file cleanup and optional backup before deletion.
-  log_maintenance:
-    # [OPTIONAL] When true, make a copy of old log files with '.bk' suffix before deletion.
-    # Default (hardcoded): false
-    backup_logs: false
-    # [OPTIONAL] Remove log files older than this many days.
-    # Default (hardcoded): 7
-    remove_logs_days: 7
-
-# --------------------------------------------------------------------------------------
-# SECTION: FEATURE EXTRACTOR (deep model used to embed cropped photos)
+# FEATURE EXTRACTOR (model that turns photos into embeddings)
 # --------------------------------------------------------------------------------------
 feature_extractor:
-  # [OPTIONAL] model_name: backbone architecture used to extract image embeddings from cropped photos. Default: efficientnet
-  #   Supported (examples): efficientnet, resnet, convnext, swin, regnet, resnet_hf, efficientnet_hf
-  #   Choose a model with weights available in your environment (see pretrained_model_path_or_id).
+  # Purpose: Backbone model architecture used for feature extraction.
+  # Default if omitted: efficientnet
+  # Options: efficientnet, resnet, convnext, swin, regnet, resnet_hf, efficientnet_hf
   model_name: efficientnet
 
-  # [OPTIONAL] pretrained_model_path_or_id: where to load weights from.
-  #   - Air-gapped/offline: Provide a local .pth file or a local folder for HF models.
-  #   - Online: A Hugging Face model ID or local cache path can be used.
-  #   Examples:
-  #     models/efficientnet/efficientnet_b0_weights.pth
-  #     microsoft/resnet-50 (for huggingface transformers)
-  # Default: None (provide explicitly for your environment)
+  # Purpose: Where to load the model weights from (local path or model ID).
+  # Default if omitted: none (code expects a compatible path/ID in your environment)
+  # Example choices: models/efficientnet/efficientnet_b0_weights.pth
   pretrained_model_path_or_id: models/efficientnet/efficientnet_b0_weights.pth
 
-  # [OPTIONAL] device: inference device selection. Default: auto
-  #   - auto: Prefer GPU (CUDA) when available, otherwise CPU.
-  #   - cuda: Force GPU (errors if CUDA is unavailable).
-  #   - cpu:  Force CPU (slower but robust on machines without GPUs).
+  # Purpose: Device selection policy for inference.
+  # Default if omitted: auto (prefer GPU if available, else CPU)
+  # Options: auto, cuda, cpu
   device: auto
 
-  # [OPTIONAL] enable_feature_dimension_fixing: when true, the system verifies the model's
-  # actual feature dimension and updates your config dynamically at runtime.
-  # This protects against misconfigured feature_dimension values. Default: true
-  enable_feature_dimension_fixing: true
-
-  # [OPTIONAL] feature_dimension: expected embedding dimension for your chosen model.
-  # If enable_feature_dimension_fixing is true, this can be treated as a hint
-  # and will be corrected automatically when mismatched. Default: model-specific (e.g., efficientnet: 1280)
-  # Common values:
-  #   resnet/resnet_hf: 2048, efficientnet/efficientnet_hf: 1280,
-  #   swin: 768, convnext: 1024, regnet: 2528
-  feature_dimension: 1280
-
 # --------------------------------------------------------------------------------------
-# SECTION: VECTOR DATABASE (FAISS | Bruteforce providers)
+# VECTOR DATABASE (where/ how image embeddings are searched)
 # --------------------------------------------------------------------------------------
 vector_database:
-  # [OPTIONAL] provider: select the vector database implementation. Default: faiss
-  #   - faiss: local file-based index. Default and fully supported in TIF workflows.
-  #   - bruteforce: no index; direct scan of image DB folder during search.
-  # NOTE: In privacy mode (search_task.privacy_mode=true), do NOT use 'bruteforce'.
-  #       Bruteforce requires persisted crops on disk. The workflow will abort with a clear
-  #       message if privacy mode is active and bruteforce is selected or required.
+  # Purpose: Choose the similarity search provider.
+  # Default if omitted: faiss
+  # Options: faiss (local index), bruteforce (no index)
+  # Note: When privacy mode is enabled by defaults elsewhere, 'bruteforce' is disallowed.
   provider: faiss
 
-  # [OPTIONAL] allow_fallback: if true, TIF search falls back to a brute-force search over
-  # the image DB folder when the FAISS index cannot be loaded or is empty. Default: true
-  allow_fallback: true
-
-  # [OPTIONAL] fallback_choice: choose fallback behavior when allow_fallback is true and index load fails.
-  #   - transient: search only within the current batch (no base index): default.
-  #   - bruteforce: search against the image DB folder using brute-force.
-  # Default: transient
-  fallback_choice: transient  # options: transient | bruteforce
-
-  # [OPTIONAL] build_index_on_load_failure: when true, automatically trigger index building if index loading fails.
-  # Uses indexing_task.input_tif_folder_for_indexing (preferred) or indexing_task.image_folder_to_index.
-  # Logs will indicate the automatic build attempt and its result. Default: false
-  build_index_on_load_failure: false
-
-  # FAISS configuration used for indexing and searching.
-  faiss:
-    # [OPTIONAL] output_directory: folder for the FAISS .index and mapping (.pkl) files. Default: instance/faiss_indices
-    output_directory: instance/faiss_indices
-
-    # [OPTIONAL] filename_stem: base name used to create the index and mapping filenames. Default: faiss_collection
-    # Example final filenames: faiss_collection_efficientnet_flat.index, ..._mapping.pkl
-    filename_stem: faiss_collection
-
-    # [OPTIONAL] index_type: choose the FAISS index structure. Default: flat
-    #   - flat: Exact search, simplest, accurate, but slower for large datasets.
-    #   - ivf:  Inverted file index (clustered). Great speed/accuracy trade-off. Needs training.
-    #   - hnsw: Graph-based. Very fast queries, higher memory footprint.
-    index_type: flat   # options: flat | ivf | hnsw
-
-    # IVF-specific parameters (used only when index_type: ivf)
-    ivf_nlist: 2048
-    ivf_nprobe_search: 32
-
-    # HNSW-specific parameters (used only when index_type: hnsw)
-    hnsw_m: 32
-    hnsw_ef_construction: 40
-    hnsw_efsearch_search: 50
-
-    # [OPTIONAL] partition_capacity: provider-agnostic shard capacity.
-    # Defines the maximum number of items stored in a single FAISS index file pair.
-    # When omitted, FAISS defaults to 250000 items per shard. To explicitly disable sharding
-    # and revert to legacy single-file mode, set this key to one of:
-    #   - null
-    #   - "legacy"
-    #   - "single"
-    #   - "none"
-    # If both partition_capacity and legacy keys are provided, partition_capacity takes precedence.
-    # partition_capacity: 250000
-
-    # [LEGACY] total_indexes_per_file: shard capacity per FAISS file pair.
-    # Retained for backward compatibility; prefer partition_capacity going forward.
-    # When set to an integer N, the manager rolls to new files named
-    # {filename_stem}_{model_name_lower}_{index_type_lower}_sNNNN.index and
-    # {filename_stem}_{model_name_lower}_{index_type_lower}_sNNNN_mapping.pkl
-    # This MUST be greater than or equal to ivf_nlist.
-    # A large value like 250,000 is efficient for production. The system will automatically
-    # create and train new shards as this capacity is reached.
-    total_indexes_per_file: 250000
-
 # --------------------------------------------------------------------------------------
-# SECTION: INDEXING TASK (TIFs → OCR pages → photo crops → FAISS index)
+# INDEXING TASK (build the searchable database from TIFs)
 # --------------------------------------------------------------------------------------
 indexing_task:
-  # image_folder_to_index: destination folder where cropped images are saved and
-  # then indexed by FAISS. This also serves as the brute-force fallback database.
-  # Required if you plan to build an index or to use it as the default brute-force DB. Default: instance/database_images
+  # Purpose: Folder where cropped images are saved and indexed; also used by fallbacks.
+  # Default if omitted: instance/database_images
+  # Typical value: keep default unless you need a different data location.
   image_folder_to_index: instance/database_images
 
-  # [OPTIONAL] input_tif_folder_for_indexing: source folder of .tif/.tiff documents for
-  # indexing. The build process will:
-  #   1) Use OCR to find relevant pages per TIF (searcher_config.search_text).
-  #   2) Extract photos from those pages (photo_extractor_config).
-  #   3) Save crops into image_folder_to_index.
-  #   4) Build/update the FAISS index from the saved crops.
-  # Can be overridden by CLI: `python doc_image_verifier.py build-image-index --folder <path>`.
-  # Default: ./data_real
+  # Purpose: Source folder containing .tif/.tiff documents used to build the index.
+  # Default if omitted: ./data_real
+  # CLI override: --folder <path>
   input_tif_folder_for_indexing: ./data_real
 
-  # [OPTIONAL] batch_size: how many images to embed per batch during index build. Tune based
-  # on your GPU/CPU memory. Larger batches are faster but use more memory. Default: 32
+  # Purpose: Number of images processed per embedding batch during indexing.
+  # Default if omitted: 32
+  # Options: positive integer (adjust for memory/performance)
   batch_size: 32
 
-  # [OPTIONAL] force_rebuild_index: if true, clears any existing index before building. Default: false
-  force_rebuild_index: false
-
-  # [OPTIONAL] scan_for_database_subfolders: if true, indexing will recursively scan the
-  # image_folder_to_index for new images when updating an existing index. Default: false
-  scan_for_database_subfolders: false
-
-  # IVF training controls (only when vector_database.faiss.index_type: ivf)
-  # [OPTIONAL] ivf_train_samples_max: maximum samples to use for training IVF centroids. Default: 500
-  ivf_train_samples_max: 500
-  # [OPTIONAL] ivf_train_samples_ratio: fraction of total vectors used for training. Default: 0.1
-  ivf_train_samples_ratio: 0.1
-
-  # [OPTIONAL] delete_image_folder_after_indexing: if true, deletes image_folder_to_index
-  # once indexing succeeds. Use with extreme caution (irreversible). Default: false
-  delete_image_folder_after_indexing: false
-
 # --------------------------------------------------------------------------------------
-# SECTION: SEARCH TASK (TIF batch search → aggregate to parent documents)
+# SEARCH TASK (batch search of query TIFs and report generation)
 # --------------------------------------------------------------------------------------
 search_task:
-  # input_tif_folder_for_search: folder containing .tif/.tiff query documents.
-  # Can be overridden by CLI: `python doc_image_verifier.py search-doc --folder <path>`.
-  # Required when running search (unless provided via CLI). Default: ./data_real
+  # Purpose: Folder of .tif/.tiff query documents for similarity search.
+  # Default if omitted: ./data_real
+  # CLI override: --folder <path>
   input_tif_folder_for_search: ./data_real
 
-  # [OPTIONAL] top_k: how many nearest neighbors to retrieve per cropped photo. Default: 5
+  # Purpose: Nearest neighbors retrieved per cropped photo.
+  # Default if omitted: 5
+  # Options: positive integer
   top_k: 5
 
-  # [OPTIONAL] top_doc: how many top parent documents (TIFs) to return per query TIF. Default: 7
+  # Purpose: Number of top parent documents to return per query document.
+  # Default if omitted: 7
+  # Options: positive integer
   top_doc: 7
 
-  # [OPTIONAL] top_doc_global: how many top documents to include in the run-level "top_documents"
-  # list aggregated across all queries. If omitted, defaults to top_doc.
-  # Useful when you want more/less global results compared to per-query results.
-  # Example: 10
-  # Default: (omitted -> defaults to top_doc)
-  top_doc_global: 7
-
-  # [OPTIONAL] aggregation_strategy: how to combine per-photo scores into a per-document score
-  # for each query TIF. Default: max
-  #   - max:  use the best photo match as the document score (robust, default)
-  #   - sum:  sum of all photo scores (favors docs with many matched photos)
-  #   - mean: average photo score (balances number/quality of matches)
-  aggregation_strategy: max   # options: max | sum | mean
-
-  # [OPTIONAL] new_query_new_subfolder: if true, each search run is saved under a unique
-  # timestamped folder. Prevents overwriting previous runs. Default: true
-  new_query_new_subfolder: true
-
-  # output_folder_for_results: root folder for all run artifacts, including
-  # summaries, optional copies of TIFs, and per-query subfolders.
-  # Required if save_outputs_to_folder is true. Default: instance/search_results
-  output_folder_for_results: instance/search_results
-
-  # [OPTIONAL] search_summary_json_filename: file name for the run-level summary JSON. Default: search_results_summary.json
-  search_summary_json_filename: search_results_summary.json
-
-  # [OPTIONAL] copy_query_image_to_output: if true, copy the input TIF for each query into
-  # the run output for traceability. Default: true
-  copy_query_image_to_output: true
-
-  # [OPTIONAL] copy_similar_images_to_output: if true, copy the ranked parent TIFs for each
-  # query into that query's subfolder (requires TIFs be discoverable in known folders). Default: true
-  copy_similar_images_to_output: true
-
-  # [OPTIONAL] save_query_in_separate_subfolder_if_copied: if true, query copies are stored
-  # in a dedicated "_query_image_source" subfolder under each query folder. Default: true
-  save_query_in_separate_subfolder_if_copied: true
-
-  # [OPTIONAL] save_search_summary_json: if true, write a run-level JSON summary file that
-  # includes global parameters and per-query results. When save_global_top_docs is true,
-  # the run-level summary JSON will also include a 'global_top_docs' array in its
-  # global section. Default: true
-  save_search_summary_json: true
-
-  # [OPTIONAL] generate_tif_previews: if true, create JPG previews for query and ranked
-  # parent TIFs (first page) to help rapid manual inspection. Default: false (privacy mode may disable)
-  generate_tif_previews: false
-
-  # [OPTIONAL] create_per_query_subfolders_for_tif: if true, create a folder per query TIF.
-  # If false, all results are placed under the run root. Default: false
-  create_per_query_subfolders_for_tif: true
-
-  # [OPTIONAL] save_outputs_to_folder: master switch to write any filesystem outputs
-  # (run folders, copied TIFs, previews, JSON summaries, CSV debug exports).
-  # - true: enable all file outputs governed by the other flags below.
-  # - false: disable all file outputs regardless of those flags (console/DB only).
-  # Default: false (DB-only by default when omitted)
+  # Purpose: Persist run outputs (JSON summary, optional copies) to disk.
+  # Default if omitted: false (code-only/DB-only)
+  # Options: true, false
   save_outputs_to_folder: true
 
-  # [OPTIONAL] Brute-force fallback settings (used when FAISS index cannot be loaded)
-  # Default: bruteforce_db_folder=instance/database_images, bruteforce_batch_size=32
-  bruteforce_db_folder: instance/database_images
-  bruteforce_batch_size: 32
+  # Purpose: Create a unique timestamped subfolder per run to avoid overwriting.
+  # Default if omitted: true
+  # Options: true, false
+  new_query_new_subfolder: true
 
-  # [OPTIONAL] Augmentation/transient embeddings base directory override (per-run subfolder is appended).
-  # Final storage path will be <base>/transient_emb_store/<run_identifier>.
-  # Default: instance/query_image_embeddings
-  query_embed_index:
-    output_path_query_embed_index: instance/query_image_embeddings
+  # Purpose: Base folder for saved outputs when enabled.
+  # Default if omitted: instance/search_results
+  # Options: any writable path
+  output_folder_for_results: instance/search_results
 
-  # ------------------------------------------------------------------------------------
-  # PRIVACY-FIRST, BATCH-FIRST AUGMENTATION (Phase A then Phase B)
-  # ------------------------------------------------------------------------------------
-  # Master switch to enable batch-first process where the current batch's query images
-  # are embedded first and included in the searchable set for within-batch similarity.
-  # Default: false (preserves current behavior).
-  index_query_doc_images: false
+  # Purpose: Write a run-level JSON summary with parameters and results.
+  # Default if omitted: true
+  # Options: true, false
+  save_search_summary_json: true
 
-  # Augmentation mode when index_query_doc_images is true.
-  # - persistent_query_index: Add batch embeddings to main corpus (FAISS).
-  # - transient_query_index:  Keep batch embeddings in a per-run side index; do not modify main corpus.
-  # Default: transient_query_index
-  augmentation_mode: transient_query_index
-
-  # Privacy mode. When true, never persist cropped query photos to disk; only vectors and
-  # minimal metadata (names/IDs) are used. Brute-force will be disallowed when privacy_mode is true.
-  # Default: true (privacy-first)
-  privacy_mode: true
-
-  # Control whether a query's own parent document can appear as a match.
-  # - false: filter out neighbors whose parent document equals the current query doc
-  # - true:  allow self matches (e.g., 1.0 similarity) for debugging/inspection
-  # Default: false
-  include_query_image_to_result: false
-
-  # Build a per-run side index for the batch; discarded at end of run when using
-  # transient augmentation. For large batches, implementations may use an on-disk
-  # temporary index plus a small ID→name map.
-  # Default: true
-  transient_batch_index: true
-
-  # Enforce no disk staging of crops when privacy mode is active. If a search path would
-  # require bruteforce (which needs persisted crops), the run will abort with a clear message.
-  # Default: false
-  allow_disk_staging_for_bruteforce: false
-
-  # Optional PostgreSQL saving and explainability payload
-  # [OPTIONAL] save_results_to_postgresql: if true, insert the run results into a DB table
-  #   defined under results_postgresql below. Default: true
-  # [OPTIONAL] doc_sim_img_check: if true, generate for each top document a compact JSON
-  #   mapping of the best contributing DB images (explanatory_db_images). Default: false
-  # [OPTIONAL] doc_sim_img_check_max_k: optionally limit the number of explanatory images
-  #   per document (defaults to top_k if omitted).
-  # [OPTIONAL] save_global_top_docs: when true, persist the run-level global top_documents list
-  #   to outputs: per-query CSV column 'global_top_docs' and PostgreSQL column 'global_top_docs'.
-  #   When false or omitted, an empty list [] is written. Safe to leave disabled. Default: false
-  save_global_top_docs: false
+  # Purpose: Explicitly disable DB writes to avoid connection errors in minimal setups.
+  # Default if omitted: true
+  # Options: true, false
   save_results_to_postgresql: false
-  doc_sim_img_check: false
-  # doc_sim_img_check_max_k: 10
-
-  # [OPTIONAL] Column suppression for outputs (CSV/JSON/DB)
-  # Provide a list of column names to hide from per-query CSV, run summary JSON,
-  # and to store NULL in matching DB columns. Supported names include:
-  #   - run_identifier, requesting_username, search_time_stamp, query_document,
-  #     matched_query_document, top_similar_docs, sim_img_check,
-  #     image_authenticity, fraud_doc_probability, global_top_docs
-  # Additionally, any key_enrichment columns listed under key_enrichment.columns_for_results
-  # can be hidden by specifying their names here. Default: []
-  remove_columns_from_results: []
 
 # --------------------------------------------------------------------------------------
-# SECTION: POSTGRESQL (optional) for saving TIF results
+# PHOTO EXTRACTION (how photos are cropped from relevant TIF pages)
 # --------------------------------------------------------------------------------------
-# Notes
-# - You may use environment variables for secrets (e.g., via a .env file):
-#     POSTGRES_DB, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD
-# - The table will be created automatically if it does not exist.
-# - When search_task.save_results_to_postgresql is true, the system inserts run rows
-#   into the configured table and can optionally export CSVs for auditing when
-#   debug_export_csv is true.
-results_postgresql:
-  # [OPTIONAL] database_name: PostgreSQL database name (allows ${POSTGRES_DB}). Default: (none)
-  database_name: ${POSTGRES_DB}  # Env override: POSTGRES_DB
-  # [OPTIONAL] host: PostgreSQL host (allows ${POSTGRES_HOST}). Default: (none)
-  host: ${POSTGRES_HOST}  # Env override: POSTGRES_HOST
-  # [OPTIONAL] port: PostgreSQL port (allows ${POSTGRES_PORT}). Default: (none)
-  port: ${POSTGRES_PORT}  # Env override: POSTGRES_PORT
-  # [OPTIONAL] user: PostgreSQL username (allows ${POSTGRES_USER}). Default: (none)
-  user: ${POSTGRES_USER}  # Env override: POSTGRES_USER
-  # [OPTIONAL] password: PostgreSQL password (allows ${POSTGRES_PASSWORD}). Default: (none)
-  password: ${POSTGRES_PASSWORD}  # Env override: POSTGRES_PASSWORD
-
-  # [OPTIONAL] table_name_doc_sim: target table for TIF document similarity results. Default: doc_similarity_results
-  table_name_doc_sim: doc_similarity_results  # Env override: POSTGRES_TABLE_NAME (if set)
-
-  # [OPTIONAL] table_name_img_sim: target table for image-only similarity results (find_sim_images.py).
-  # This table is separate from document similarity tables and will be created automatically if missing.
-  # Default: image_similarity_results
-  table_name_img_sim: image_similarity_results  # Env override: POSTGRES_TABLE_NAME (if set)
-
-  # [OPTIONAL] debug_export_csv: if true, also writes exported CSVs for per-query details
-  # under the run folder. Useful for debugging or manual DB import. Default: false
-  debug_export_csv: false
-
-# --------------------------------------------------------------------------------------
-# SECTION: KEY ENRICHMENT (optional, adds extra columns to per-query CSV/DB outputs)
-# --------------------------------------------------------------------------------------
-# [OPTIONAL] Entire section. You can safely omit this section; no extra columns are added.
-# Purpose
-# - Allows you to attach additional metadata columns to each query TIF (e.g., store_id,
-#   store_name, business_number). These appear in:
-#   1) Per-query CSV rows (when results_postgresql.debug_export_csv is true or when
-#      saving to DB with per-query debug CSV enabled), and
-#   2) Per-query JSON under key_metadata in the run artifacts.
-#
-# Data model and mapping
-# - [OPTIONAL] columns_for_results: ordered list of column names to show in the per-query CSV. Default: []
-# - [OPTIONAL] per_query_metadata_map: a mapping keyed by query_document (the TIF filename as
-#   it appears to the workflow, e.g., "Store_1001.tif"). Each value is a dict of
-#   {column_name: value} for the columns listed in columns_for_results. Default: {}
-#
-# How enrichment is applied
-# - Primary lookup (per-query context): direct match on the current query_document
-#   filename. If a row exists, its values are included as key_metadata for that query
-#   and will be exported as extra columns in the per-query CSV.
-# - Fallback (run-level/global top_documents mapping): when building the global
-#   aggregated list of top_documents, the system attempts to find enrichment for a
-#   parent document name by first trying a direct match on that TIF filename; if
-#   absent, it leverages neighbor DB image filenames observed during search.
-#   This improves the chance of mapping enrichment to the correct parent document
-#   in the final run-level view without affecting per-query matching.
-#
-# Worked example (2 queries, 3 columns)
-# key_enrichment:
-#   columns_for_results: ["store_id", "store_name", "inspector"]
-#   per_query_metadata_map:
-#     "Store_1001.tif": {"store_id": "KR-1001", "store_name": "Gangnam", "inspector": "Lee"}
-#     "Store_1002.tif": {"store_id": "KR-1002", "store_name": "Jongno",  "inspector": "Kim"}
-#
-# - During search, the per-query CSV will add three extra columns and each row will show:
-#     query_document, ..., store_id, store_name, inspector
-#     Store_1001.tif, ..., KR-1001,    Gangnam,   Lee
-#     Store_1002.tif, ..., KR-1002,    Jongno,    Kim
-# - If a top document cannot be matched by name in the run-level aggregation, the
-#   system may still attach enrichment by matching neighbor DB image filenames.
-#
-# Safety
-# - This section is optional. If omitted or left empty, no extra columns are added
-#   and the pipeline behavior is unchanged.
-#
-# key_enrichment:
-#   columns_for_results: []
-#   per_query_metadata_map: {}
-
-# --------------------------------------------------------------------------------------
-# SECTION: OCR PAGE FINDER (controls which TIF pages to extract photos from)
-# --------------------------------------------------------------------------------------
-searcher_config:
-  # [OPTIONAL] search_text: the text pattern to locate relevant pages. Default: "가맹점 실사 사진"
-  search_text: "가맹점 실사 사진"
-
-  # [OPTIONAL] language: OCR language code used by the backend (PaddleOCR recommended). Default: ko
-  language: ko
-
-  # [OPTIONAL] ocr_backend: OCR engine selection. Default: paddleocr
-  ocr_backend: paddleocr
-
-  # [OPTIONAL] search_mode: matching mode for text search; e.g., exact_phrase. Default: exact_phrase
-  search_mode: exact_phrase
-
-  # [OPTIONAL] allow_normalization: if true, normalize recognized text (e.g., Unicode form). Default: true
-  allow_normalization: true
-
-  # [OPTIONAL] remove_spaces_in_normalization: if true, remove spaces during normalization. Default: true
-  remove_spaces_in_normalization: true
-
-  # [OPTIONAL] recognized_text_debug: if true, persists/prints recognized text for debugging OCR performance and matches. Default: false
-  recognized_text_debug: false
-
-  # [OPTIONAL] search_location.top: relative vertical location (0..1) used to focus the text search. Default: 0.05
-  search_location:
-    top: 0.05
-
-  # [OPTIONAL] use_offline_models: if true, force offline OCR models/run (no downloads). Default: false
-  use_offline_models: false
-
-  # [OPTIONAL] use_angle_cls: if true, enable angle classification to handle rotated pages. Default: true
-  use_angle_cls: true
-
-  # [OPTIONAL] use_gpu_for_paddle: if true and supported, run OCR on GPU. Default: true
-  use_gpu_for_paddle: true
-
-  # [OPTIONAL] paddle_batch_size: OCR batch size. Increase for speed if memory allows. Default: 6
-  paddle_batch_size: 6
-
-# --------------------------------------------------------------------------------------
-# SECTION: PHOTO EXTRACTION (YOLO detection or predefined bounding boxes)
-# --------------------------------------------------------------------------------------
-# [OPTIONAL] This config is used here only if required to override the configuration in 
-# photo_extractor module
-# Notes on defaults and overrides:
-# - The extractor module defaults to mode=bbox. If you omit photo_extraction_mode, bbox is used.
-# - The photo_extractor_config here overrides the module's safe defaults via deep-merge; unspecified
-#   keys fall back to the module defaults.
-# - Mode gating is strict:
-#     * In bbox mode, YOLO settings are ignored and no YOLO packages or model files are required.
-#     * In yolo mode, bbox settings are ignored and a valid YOLO model is required.
 photo_extractor_config:
-  # [OPTIONAL] photo_extraction_mode: choose how to crop photos from relevant pages. Default: bbox
-  #   - yolo: detect photos automatically using a YOLO model.
-  #   - bbox: crop using predefined bounding boxes (see bbox_extraction below).
-  photo_extraction_mode: bbox   # options: yolo | bbox
+  # Purpose: Choose extraction strategy.
+  # Default if omitted: bbox
+  # Options: bbox (predefined boxes), yolo (object detection model)
+  photo_extraction_mode: bbox
 
-  # [OPTIONAL] photo_extractor_debug: if true, logs per-page crop counts and total crops per document for debugging extraction coverage and quality. Default: false
-  photo_extractor_debug: false
-
-  # YOLO detection settings (only used when photo_extraction_mode: yolo)
-  yolo_object_detection:
-    # [OPTIONAL] model_path: path to your trained YOLO weights for photo detection. Default: trained_model/weights/best.pt
-    model_path: trained_model/weights/best.pt
-
-    inference:
-      # [OPTIONAL] confidence_threshold: minimum confidence for detections to be kept. Default: 0.25
-      confidence_threshold: 0.25
-      # [OPTIONAL] iou_threshold: IoU threshold for non-maximum suppression. Default: 0.45
-      iou_threshold: 0.45
-      # [OPTIONAL] imgsz: inference image size. Adjust based on model training and speed needs. Default: 640
-      imgsz: 640
-      # [OPTIONAL] target_object_names: optional list of class names to keep from YOLO output. Default: []
-      target_object_names: []
-
-  # BBox cropping settings (only used when photo_extraction_mode: bbox)
   bbox_extraction:
-    # [OPTIONAL] bbox_format: coordinate convention for provided boxes. Default: xyxy
-    #   - xyxy: left, top, right, bottom (absolute pixels if normalized: false).
-    #   - xywh: left, top, width, height.
-    #   - cxcywh: center_x, center_y, width, height.
+    # Purpose: Bounding box coordinate convention.
+    # Default if omitted: xyxy
+    # Options: xyxy (l,t,r,b), xywh (l,t,w,h), cxcywh (cx,cy,w,h)
     bbox_format: xyxy
 
-    # [OPTIONAL] normalized: whether bbox coordinates are normalized [0..1]. When true,
-    # the extractor scales them by page width/height. Default: false
+    # Purpose: Whether bbox coordinates are normalized (0..1) or in pixels.
+    # Default if omitted: false
+    # Options: true, false
     normalized: false
 
-    # [OPTIONAL] bbox_list: list of boxes per page to crop. If empty and this mode is used,
-    # the pipeline will fallback to a full-page crop when configured to do so in
-    # the TIF workflows to avoid silent zero-crop results. Default: example list (see below)
+    # Purpose: List of bounding boxes to crop from each relevant page.
+    # Default if omitted: module falls back to its internal defaults (may produce fewer/no crops).
+    # Options: list of 4-number arrays as [left, top, right, bottom] in pixels for xyxy.
     bbox_list:
       - [171, 236, 1480, 1100]
       - [171, 1168, 1480, 2032]
-
-# --------------------------------------------------------------------------------------
-# SECTION: PHOTO AUTHENTICITY CLASSIFIER (optional, default OFF)
-# --------------------------------------------------------------------------------------
-# Overview
-# - This section is optional. When disabled (default) or if the classifier cannot be
-#   initialized, the pipeline behavior is unchanged. No additional outputs are added
-#   and no decisions are impacted.
-# - When enabled and the classifier is available, each cropped photo is classified
-#   into one of the configured classes. The system then computes a per-query
-#   fraud probability based on similarity and authenticity signals.
-#
-# Runtime behavior
-# - Disabled (check_image_authenticity: false) OR classifier not available:
-#   * No image_authenticity map is attached to per-query results.
-#   * No fraud probability is computed; behavior is identical to prior versions.
-# - Enabled AND classifier initialized:
-#   * Per-query results include:
-#       - image_authenticity: {"<query_stem>_q_<idx>.jpg": "<predicted_class>", ...}
-#       - fraud_doc_probability: one of {"Very_High", "High", "No"}
-#   * Fraud probability mapping rules:
-#       Let S = true if any per-query top document score >= similar_doc_flag_threshold.
-#       Let A = true if any cropped photo’s predicted class is in non_authentic_image_classes.
-#       - if S and A: "Very_High"
-#       - elif S or A: "High"
-#       - else: "No"
-#
-# Notes
-# - classifier_config_path may be relative to the project root folder. A Windows example:
-#     external/image_authenticity_classifier/classifier_config.yaml
-# - Example non_authentic_image_classes:
-#     ["moire", "recaptured", "printed"] for nothing then you can remove the config or use []
-photo_authenticity_classifier_config:
-  # [OPTIONAL] Master switch. Default: false. When false, there are no code path changes.
-  check_image_authenticity: false
-
-  # [OPTIONAL] Classes considered non-authentic indicators. Default: []
-  # Example: ["moire", "recaptured", "printed"]
-  non_authentic_image_classes: []
-
-  # [OPTIONAL] Threshold on per-query top document scores used to set similarity flag S. Default: 0.8
-  similar_doc_flag_threshold: 0.8
-
-  # [OPTIONAL] Path to the classifier's YAML config. Relative to project root is acceptable. Default: external/image_authenticity_classifier/classifier_config.yaml
-  # If the file is missing or the classifier fails to load, the system continues
-  # without authenticity checks and behavior is unchanged.
-  classifier_config_path: external/image_authenticity_classifier/classifier_config.yaml
-
-# --------------------------------------------------------------------------------------
-# SECTION: CONFIG FILE MANAGEMENT (optional)
-# --------------------------------------------------------------------------------------
-# These settings control how tools like config_loader.save_config() behave when writing
-# updates to this YAML. You can safely omit this section if you never programmatically
-# update the configuration file from within the application or CLI tools.
-config_saving:
-  # [OPTIONAL] create_backup_on_config_save: If true (recommended), a timestamped backup
-  # is created in the same directory before overwriting this file. Default: true
-  create_backup_on_config_save: true
-
-# ======================================================================================
-# END OF TIF-ONLY CONFIGURATION TEMPLATE
-# ======================================================================================
