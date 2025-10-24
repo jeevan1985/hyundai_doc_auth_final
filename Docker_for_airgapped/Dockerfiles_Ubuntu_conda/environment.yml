@@ -13,6 +13,9 @@
 #   - Conda Manages Core Binaries (Python, CUDA, PyTorch, FAISS, NumPy).
 #   - Pip Manages Everything Else (as determined by the original environment).
 
+# Test environement with: python -c "import torch, faiss; print('🔥 PyTorch:', torch.__version__); print('⚙️ CUDA:', torch.version.cuda); print('🧠 cuDNN:', torch.backends.cudnn.version()); print('🖥️ CUDA available:', torch.cuda.is_available()); print('🎯 GPU name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No GPU detected'); print('🔍 FAISS:', faiss.__version__); print('🚀 FAISS GPU available:', faiss.get_num_gpus() > 0)"
+
+
 name: image-similarity-env
 channels:
   - pytorch
@@ -31,7 +34,7 @@ dependencies:
   - ipykernel
   - nbdime=4.0.2     # (added) git diff for notebooks Usage: >> nbdime config-git --enable --global  then =>  nbdiff-web path_to_notebook.ipynb
 
-  # GPU Stack & The Core AI Frameworks
+  # GPU Stack & The Core AI Frameworks (For CUDA version 11.7)
   - cudatoolkit=11.7.1
   - cudnn=8.4.1
   - pytorch=2.0.1
@@ -197,7 +200,7 @@ dependencies:
   - sphinx-autodoc-typehints==2.3.0
   - sphinx-copybutton==0.5.2
   - sphinx-tabs==3.4.7
-  - sphinx-panels==0.4.1
+  # - sphinx-panels==0.4.1
   - sphinx-intl==2.3.2
   - sphinxcontrib-serializinghtml==2.0.0
   # Optional system dependencies for PDF generation (not pip):

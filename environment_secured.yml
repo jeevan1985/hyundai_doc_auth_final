@@ -5,6 +5,8 @@
 # portability, performance, and commercial use. This is the complete and
 # verified version.
 #
+# # This is for CUDA version 11.8 (Security issues fixed)
+
 # HOW TO USE:
 #   1. conda env remove -n img-simi-prod  (IMPORTANT: Remove failed attempts first!)
 #   2. conda env create -f environment.yml --override-channels
@@ -12,6 +14,8 @@
 # PRINCIPLES:
 #   - Conda Manages Core Binaries (Python, CUDA, PyTorch, FAISS, NumPy).
 #   - Pip Manages Everything Else (as determined by the original environment).
+# Test environement with: python -c "import torch, faiss; print('🔥 PyTorch:', torch.__version__); print('⚙️ CUDA:', torch.version.cuda); print('🧠 cuDNN:', torch.backends.cudnn.version()); print('🖥️ CUDA available:', torch.cuda.is_available()); print('🎯 GPU name:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'No GPU detected'); print('🔍 FAISS:', faiss.__version__); print('🚀 FAISS GPU available:', faiss.get_num_gpus() > 0)"
+
 
 name: image-similarity-env
 channels:
@@ -31,14 +35,19 @@ dependencies:
   - ipykernel
   - nbdime=4.0.2     # (added) git diff for notebooks Usage: >> nbdime config-git --enable --global  then =>  nbdiff-web path_to_notebook.ipynb
 
-  # GPU Stack & The Core AI Frameworks
-  - cudatoolkit=11.7.1
-  - cudnn=8.4.1
-  - pytorch=2.0.1
-  - pytorch-cuda=11.7
-  # --- FIX: Explicitly add torchvision and torchaudio here to install CUDA-enabled versions ---
-  - torchvision=0.15.2  
-  - torchaudio=2.0.2  
+  # GPU Stack & The Core AI Frameworks (CUDA 11.8 target)
+  # IMPORTANT:
+  # - Prefer pytorch + pytorch-cuda=11.8 from channels [pytorch, nvidia].
+  # - DO NOT also install cudatoolkit alongside pytorch-cuda to avoid dual CUDA runtimes.
+  # - cudnn may be kept, but ensure it comes from conda and not pip.
+  - cudatoolkit=11.8.0
+  # - cudnn=8.7.0
+  - pytorch=2.2.0
+  - torchvision=0.17.0
+  - torchaudio=2.2.0
+  - pytorch-cuda=11.8
+
+  # Optional: GPU-accelerated FAISS. Ensure a CUDA11.8-compatible build is available for your platform.
   - faiss-gpu=1.7.4
 
   # The most critical scientific library, locked to prevent NumPy 2.x issues.

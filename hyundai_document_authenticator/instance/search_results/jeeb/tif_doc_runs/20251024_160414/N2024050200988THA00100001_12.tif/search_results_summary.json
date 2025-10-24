@@ -1,0 +1,49 @@
+{
+  "global": {
+    "aggregation_strategy_used": "max",
+    "top_k_used": 10,
+    "top_doc_used": 5,
+    "fallback_to_bruteforce_message": null,
+    "indexed_image_count": 62,
+    "index_path": "FAISS sharded index: 2 shards (first: D:\\frm_git\\hyundai_doc_auth_final\\hyundai_document_authenticator\\instance\\faiss_indices\\faiss_collection_efficientnet_flat_s0001.index)"
+  },
+  "per_query": [
+    {
+      "query_document": "N2024050200988THA00100001_12.tif",
+      "matched_query_document": "N2024050200988THA00100001_12.tif",
+      "num_query_photos": 2,
+      "top_docs": [
+        {
+          "document": "N2024050200988THA00100001_12_page1_photo0",
+          "score": 1.0
+        },
+        {
+          "document": "N2024050200988THA00100001_12_page1_photo1",
+          "score": 1.0
+        },
+        {
+          "document": "N2024041900468THA00100001_12_page1_photo0",
+          "score": 0.8616940379142761
+        },
+        {
+          "document": "N2023051801326THA00100001_13_page1_photo0",
+          "score": 0.6343369781970978
+        },
+        {
+          "document": "N2024080100108THA00100001_12_page1_photo0",
+          "score": 0.5746833682060242
+        }
+      ],
+      "elapsed_seconds": 0.16355579998344183,
+      "top_k_used": 10,
+      "top_doc_used": 5,
+      "aggregation_strategy_used": "max",
+      "image_authenticity": {
+        "N2024050200988THA00100001_12_q_0.jpg": "moire",
+        "N2024050200988THA00100001_12_q_1.jpg": "moire"
+      },
+      "fraud_doc_probability": "Not Implemented",
+      "threshold_match_count": 0
+    }
+  ]
+}

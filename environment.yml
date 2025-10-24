@@ -3,8 +3,10 @@
 # ==============================================================================
 # This file defines the exact, fully-pinned software environment, optimized for
 # portability, performance, and commercial use. This is the complete and
-# verified version.
+# verified version. 
 #
+# This is for CUDA version 11.7
+
 # HOW TO USE:
 #   1. conda env remove -n img-simi-prod  (IMPORTANT: Remove failed attempts first!)
 #   2. conda env create -f environment.yml --override-channels
@@ -31,7 +33,7 @@ dependencies:
   - ipykernel
   - nbdime=4.0.2     # (added) git diff for notebooks Usage: >> nbdime config-git --enable --global  then =>  nbdiff-web path_to_notebook.ipynb
 
-  # GPU Stack & The Core AI Frameworks
+  # GPU Stack & The Core AI Frameworks (For CUDA version 11.7)
   - cudatoolkit=11.7.1
   - cudnn=8.4.1
   - pytorch=2.0.1
