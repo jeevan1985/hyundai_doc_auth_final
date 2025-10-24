@@ -38,7 +38,7 @@ RUN conda update -n base -c conda-forge conda -y
 # very time-consuming `conda env create` step will only be re-executed if the
 # contents of `environment.yml` have changed. If the file is unchanged, Docker
 # will use the cached layer, making subsequent builds much faster.
-COPY environment.yml .
+COPY environment_secured.yml .
 
 # --- Create the Environment with conda ---
 # This is the core step of the builder stage. We use conda to create the application's
@@ -48,7 +48,7 @@ COPY environment.yml .
 #     dependencies, channels, and the environment name.
 # conda will create this new environment in a separate directory inside the container,
 # typically at `/opt/conda/envs/your-env-name`.
-RUN conda env create -f environment.yml 
+RUN conda env create -f environment_secured.yml 
 
 # --- Optional Cleanup to Reduce Image Size ---
 # After the environment is created, we can clean up caches and temporary files to
@@ -87,10 +87,10 @@ FROM debian:bookworm-slim AS final
 #     scripts for health checks (e.g., waiting for a database to be ready).
 #   - `&& rm -rf /var/lib/apt/lists/*`: This command cleans up the apt cache
 #     after installation, further reducing the final image size.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    tini \
-    netcat-openbsd \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && \
+    apt-get -y dist-upgrade && \
+    apt-get install -y --no-install-recommends tini netcat-openbsd && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Create a Dedicated Non-Root User (Security Best Practice) ---
 # Running containers as a non-root user is a fundamental security principle.

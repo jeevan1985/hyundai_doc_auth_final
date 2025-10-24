@@ -87,10 +87,10 @@ RUN conda clean -afy
     #     scripts for health checks (e.g., waiting for a database to be ready).
     #   - `&& rm -rf /var/lib/apt/lists/*`: This command cleans up the apt cache
     #     after installation, further reducing the final image size.
-    RUN apt-get update && apt-get install -y --no-install-recommends \
-        tini \
-        netcat-openbsd \
-        && rm -rf /var/lib/apt/lists/*
+    RUN apt-get update && \
+    apt-get -y dist-upgrade && \
+    apt-get install -y --no-install-recommends tini netcat-openbsd && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # --- Dynamic User Creation (Critical for Dev) ---
 # This section is preserved exactly as you wrote it. It accepts host UID/GID
