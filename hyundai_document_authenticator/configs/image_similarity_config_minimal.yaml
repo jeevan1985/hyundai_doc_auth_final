@@ -12,7 +12,7 @@ input_mode:
   # Default if omitted: "key" (uses external key-input orchestrator)
   # Options: {tif, key}
   # Recommendation: Use "tif" for simple folder-based runs (no external services needed).
-  doc_input_start: tif
+  doc_input_start: key
 
 # --------------------------------------------------------------------------------------
 # FEATURE EXTRACTOR (model that turns photos into embeddings)
